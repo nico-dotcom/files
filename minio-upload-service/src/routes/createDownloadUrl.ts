@@ -3,6 +3,7 @@ import { minioPublicClient } from "../config/minio";
 import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
 import { validateFileId } from "../middleware/validate";
+import { checkScope } from "../middleware/apiKey";
 
 const router = Router();
 
@@ -80,6 +81,9 @@ router.post(
       });
       return;
     }
+
+    // Check that the API key's prefix scope covers this object key
+    if (!checkScope(fileRecord.object_key, "download", req, res)) return;
 
     // 2. Generate presigned GET URL
     let downloadUrl: string;

@@ -9,6 +9,7 @@ RUN npm ci --ignore-scripts
 
 COPY src ./src
 RUN npm run build
+# dashboard HTML is copied into dist/ by the build script above
 
 # ─── Production stage ────────────────────────────────────────────────────────
 FROM node:20-alpine AS production

@@ -29,7 +29,12 @@ services:
       - "3001:3001"
     environment:
       PORT: "3001"
-      API_KEY: ${API_KEY}
+      MASTER_API_KEY: ${MASTER_API_KEY}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
       # Internal Docker network address — used for bucket verification & statObject
       S3_ENDPOINT: minio
@@ -100,7 +105,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./sql/api_keys.sql:/docker-entrypoint-initdb.d/02_api_keys.sql:ro
     networks:
       - app_network
     healthcheck:

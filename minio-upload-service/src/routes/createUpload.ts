@@ -5,6 +5,7 @@ import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
 import { buildObjectKey } from "../utils/filename";
 import { validateCreateUpload } from "../middleware/validate";
+import { checkScope } from "../middleware/apiKey";
 
 const router = Router();
 
@@ -74,6 +75,9 @@ router.post(
 
     const fileId = uuidv4();
     const objectKey = buildObjectKey(userId, fileId, filename);
+
+    // Check that the API key's prefix scope covers this object key
+    if (!checkScope(objectKey, "upload", req, res)) return;
 
     // 1. Insert pending record in Hasura first.
     //    We do this BEFORE generating the presigned URL so that if Hasura fails

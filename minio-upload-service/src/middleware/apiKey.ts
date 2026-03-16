@@ -1,42 +1,106 @@
 import { Request, Response, NextFunction } from "express";
+import { findApiKey, isAllowedPrefix, ApiKeyRecord } from "../config/apiKeys";
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  throw new Error("Missing required environment variable: API_KEY");
+// Attach the resolved key record to the request so routes can read it
+declare global {
+  namespace Express {
+    interface Request {
+      apiKey?: ApiKeyRecord;
+    }
+  }
 }
 
 /**
- * Simple API key authentication.
- * Clients must send:  Authorization: Bearer <API_KEY>
+ * Resolves the bearer token from the Authorization header against the
+ * api_keys table. Attaches the key record to req.apiKey.
  *
- * The /health endpoint is intentionally excluded so load balancers and
- * Cloudflare health checks can reach it without credentials.
+ * Does NOT check prefix or operation — use requireScope() for that.
+ * The /health and /dashboard routes skip this middleware entirely.
  */
-export function requireApiKey(
+export async function requireApiKey(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
+  // Master key bypass (for admin endpoints)
+  const masterKey = process.env.MASTER_API_KEY;
   const authHeader = req.headers["authorization"];
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Missing Authorization header" });
+    res.status(401).json({ error: "Missing Authorization: Bearer <key>" });
     return;
   }
 
-  const token = authHeader.slice(7); // strip "Bearer "
+  const rawKey = authHeader.slice(7);
 
-  // Constant-time comparison to prevent timing attacks
-  if (!timingSafeEqual(token, API_KEY!)) {
-    res.status(403).json({ error: "Invalid API key" });
+  // Master key gets full access
+  if (masterKey && timingSafeEqual(rawKey, masterKey)) {
+    req.apiKey = {
+      id: "master",
+      name: "Master Key",
+      prefix: "*",
+      can_upload: true,
+      can_download: true,
+      is_active: true,
+      expires_at: null,
+      created_at: new Date().toISOString(),
+      last_used_at: null,
+    };
+    next();
     return;
   }
 
-  next();
+  // DB-backed key lookup
+  try {
+    const keyRecord = await findApiKey(rawKey);
+    if (!keyRecord) {
+      res.status(403).json({ error: "Invalid or revoked API key" });
+      return;
+    }
+    req.apiKey = keyRecord;
+    next();
+  } catch (err) {
+    console.error("[apiKey] DB error during key lookup:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 }
 
-/** Poor-man's constant-time string comparison (Node < 21 doesn't expose timingSafeEqual for strings) */
+/**
+ * Checks that req.apiKey has permission to access the given object key.
+ * Call after requireApiKey.
+ */
+export function checkScope(
+  objectKey: string,
+  operation: "upload" | "download",
+  req: Request,
+  res: Response
+): boolean {
+  const key = req.apiKey;
+  if (!key) {
+    res.status(401).json({ error: "Not authenticated" });
+    return false;
+  }
+
+  if (operation === "upload" && !key.can_upload) {
+    res.status(403).json({ error: "This API key does not allow uploads" });
+    return false;
+  }
+
+  if (operation === "download" && !key.can_download) {
+    res.status(403).json({ error: "This API key does not allow downloads" });
+    return false;
+  }
+
+  if (!isAllowedPrefix(key.prefix, objectKey)) {
+    res.status(403).json({
+      error: `Access denied: this key is scoped to prefix "${key.prefix}"`,
+    });
+    return false;
+  }
+
+  return true;
+}
+
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;

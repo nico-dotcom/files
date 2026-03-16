@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Keys Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2a2d3e;
+      --primary:  #6c63ff;
+      --primary-h:#8b84ff;
+      --danger:   #ff4d4d;
+      --success:  #22c55e;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --mono:     'Fira Mono', 'Consolas', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; }
+    header span { color: var(--muted); font-size: 12px; }
+
+    main { max-width: 960px; margin: 32px auto; padding: 0 24px; }
+
+    /* Auth screen */
+    #auth-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 16px;
+    }
+    #auth-screen h2 { font-size: 20px; }
+    #auth-screen p { color: var(--muted); }
+    #auth-screen input {
+      width: 360px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--mono);
+    }
+
+    /* Sections */
+    section { margin-bottom: 32px; }
+    section h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+
+    /* Create form */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .form-grid input, .form-grid select {
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .form-grid input:focus, .form-grid select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    .form-row-full { grid-column: 1 / -1; display: flex; gap: 12px; }
+    .form-row-full label { flex: 1; }
+
+    /* Buttons */
+    button {
+      padding: 8px 18px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity .15s;
+    }
+    button:hover { opacity: .85; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-danger  { background: var(--danger);  color: #fff; padding: 4px 10px; font-size: 12px; }
+    .btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-submit  { grid-column: 1/-1; justify-self: start; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--surface); }
+    th { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(108,99,255,.04); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-green  { background: rgba(34,197,94,.15); color: #4ade80; }
+    .badge-red    { background: rgba(255,77,77,.15);  color: #f87171; }
+    .badge-purple { background: rgba(108,99,255,.15); color: var(--primary-h); }
+    .badge-blue   { background: rgba(59,130,246,.15); color: #60a5fa; }
+
+    code {
+      font-family: var(--mono);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* New key modal */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px;
+      max-width: 560px;
+      width: 100%;
+    }
+    .modal h3 { margin-bottom: 8px; font-size: 16px; color: var(--success); }
+    .modal p  { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+    .key-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      word-break: break-all;
+      color: var(--primary-h);
+      margin-bottom: 16px;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .2s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    #toast.show { opacity: 1; }
+    #toast.ok   { border-color: var(--success); color: var(--success); }
+    #toast.err  { border-color: var(--danger);  color: var(--danger); }
+
+    .empty { text-align: center; padding: 32px; color: var(--muted); }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2">
+    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+  <h1>API Keys</h1>
+  <span id="api-url-label"></span>
+</header>
+
+<!-- ── Auth screen ──────────────────────────────────────────────────────────── -->
+<div id="auth-screen">
+  <h2>Ingresá la Master Key</h2>
+  <p>Solo se usa para gestionar keys — nunca se envía al frontend.</p>
+  <input id="master-input" type="password" placeholder="sk_... o tu MASTER_API_KEY" />
+  <button class="btn-primary" onclick="login()">Entrar</button>
+</div>
+
+<!-- ── Main content ─────────────────────────────────────────────────────────── -->
+<main id="app" style="display:none">
+
+  <!-- Create form -->
+  <section>
+    <h2>Nueva API Key</h2>
+    <div class="form-grid">
+
+      <label>
+        Nombre / descripción
+        <input id="f-name" type="text" placeholder="Frontend – infopublica" />
+      </label>
+
+      <label>
+        Prefijo de carpeta (scope)
+        <input id="f-prefix" type="text" placeholder="infopublica/ o *" value="*" />
+      </label>
+
+      <label>
+        Expira el (opcional)
+        <input id="f-expires" type="datetime-local" />
+      </label>
+
+      <label>
+        Operaciones
+        <select id="f-ops">
+          <option value="both">Subir y descargar</option>
+          <option value="upload">Solo subir</option>
+          <option value="download">Solo descargar</option>
+        </select>
+      </label>
+
+      <div class="btn-submit">
+        <button class="btn-primary" onclick="createKey()">Generar key</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Keys table -->
+  <section>
+    <h2>Keys activas</h2>
+    <table id="keys-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Prefijo</th>
+          <th>Operaciones</th>
+          <th>Último uso</th>
+          <th>Expira</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="keys-body">
+        <tr><td colspan="7" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<!-- ── New key modal ─────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3>✓ Key creada exitosamente</h3>
+    <p>Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.</p>
+    <div class="key-box" id="modal-key"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="copyKey()">Copiar</button>
+      <button class="btn-primary" onclick="closeModal()">Listo, ya la copié</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+  // ── State ─────────────────────────────────────────────────────────────────
+  let MASTER_KEY = '';
+  const API_BASE = window.location.origin;   // same origin as the service
+
+  document.getElementById('api-url-label').textContent = API_BASE;
+  document.getElementById('master-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') login();
+  });
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  async function login() {
+    const val = document.getElementById('master-input').value.trim();
+    if (!val) return;
+    // Quick verify: try to list keys
+    const res = await apiFetch('/admin/keys', 'GET', null, val);
+    if (res.ok) {
+      MASTER_KEY = val;
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      renderKeys(res.data.keys);
+    } else {
+      toast('Master key inválida', 'err');
+    }
+  }
+
+  // ── Fetch helper ──────────────────────────────────────────────────────────
+  async function apiFetch(path, method, body, key) {
+    const k = key || MASTER_KEY;
+    try {
+      const r = await fetch(API_BASE + path, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + k,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await r.json().catch(() => ({}));
+      return { ok: r.ok, status: r.status, data };
+    } catch (e) {
+      return { ok: false, status: 0, data: { error: e.message } };
+    }
+  }
+
+  // ── Load keys ─────────────────────────────────────────────────────────────
+  async function loadKeys() {
+    const res = await apiFetch('/admin/keys', 'GET');
+    if (res.ok) renderKeys(res.data.keys);
+    else toast('Error al cargar keys: ' + (res.data.error || ''), 'err');
+  }
+
+  // ── Render table ──────────────────────────────────────────────────────────
+  function renderKeys(keys) {
+    const tbody = document.getElementById('keys-body');
+    if (!keys || keys.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No hay keys todavía.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = keys.map(k => {
+      const ops = k.can_upload && k.can_download ? 'Subir + Bajar'
+                : k.can_upload   ? 'Solo subir'
+                : k.can_download ? 'Solo bajar' : '—';
+      const opsBadge = k.can_upload && k.can_download
+        ? `<span class="badge badge-purple">${ops}</span>`
+        : `<span class="badge badge-blue">${ops}</span>`;
+
+      const prefixBadge = k.prefix === '*'
+        ? `<code>*</code> <span class="badge badge-purple">global</span>`
+        : `<code>${escHtml(k.prefix)}</code>`;
+
+      const status = k.is_active
+        ? '<span class="badge badge-green">Activa</span>'
+        : '<span class="badge badge-red">Revocada</span>';
+
+      const lastUsed = k.last_used_at
+        ? relTime(k.last_used_at)
+        : '<span style="color:var(--muted)">Nunca</span>';
+
+      const expires = k.expires_at
+        ? `<span style="color:${new Date(k.expires_at) < new Date() ? 'var(--danger)' : 'var(--muted)'}">${fmtDate(k.expires_at)}</span>`
+        : '<span style="color:var(--muted)">—</span>';
+
+      return `<tr>
+        <td><strong>${escHtml(k.name)}</strong><br><span style="color:var(--muted);font-size:11px">${k.id.slice(0,8)}…</span></td>
+        <td>${prefixBadge}</td>
+        <td>${opsBadge}</td>
+        <td>${lastUsed}</td>
+        <td>${expires}</td>
+        <td>${status}</td>
+        <td>${k.is_active ? `<button class="btn-danger" onclick="revokeKey('${k.id}')">Revocar</button>` : ''}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Create key ────────────────────────────────────────────────────────────
+  async function createKey() {
+    const name    = document.getElementById('f-name').value.trim();
+    const prefix  = document.getElementById('f-prefix').value.trim();
+    const expires = document.getElementById('f-expires').value;
+    const ops     = document.getElementById('f-ops').value;
+
+    if (!name) { toast('Ingresá un nombre', 'err'); return; }
+    if (!prefix) { toast('Ingresá un prefijo ("*" para todo)', 'err'); return; }
+    if (prefix !== '*' && !prefix.endsWith('/')) {
+      toast('El prefijo debe terminar en "/" (ej: "infopublica/")', 'err'); return;
+    }
+
+    const body = {
+      name,
+      prefix,
+      can_upload:   ops !== 'download',
+      can_download: ops !== 'upload',
+      expires_at:   expires ? new Date(expires).toISOString() : null,
+    };
+
+    const res = await apiFetch('/admin/keys', 'POST', body);
+    if (res.ok) {
+      document.getElementById('modal-key').textContent = res.data.key;
+      document.getElementById('modal').classList.add('open');
+      // Clear form
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-prefix').value = '*';
+      document.getElementById('f-expires').value = '';
+      loadKeys();
+    } else {
+      toast('Error: ' + (res.data.error || 'desconocido'), 'err');
+    }
+  }
+
+  // ── Revoke key ────────────────────────────────────────────────────────────
+  async function revokeKey(id) {
+    if (!confirm('¿Revocar esta key? Los clientes que la usen perderán acceso inmediatamente.')) return;
+    const res = await apiFetch('/admin/keys/' + id, 'DELETE');
+    if (res.ok) { toast('Key revocada', 'ok'); loadKeys(); }
+    else toast('Error: ' + (res.data.error || ''), 'err');
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+  }
+  function copyKey() {
+    const key = document.getElementById('modal-key').textContent;
+    navigator.clipboard.writeText(key).then(() => toast('Copiado', 'ok'));
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  let toastTimer;
+  function toast(msg, type = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.className = '', 3000);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+  }
+  function relTime(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1)   return 'Hace un momento';
+    if (m < 60)  return `Hace ${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24)  return `Hace ${h}h`;
+    return `Hace ${Math.floor(h/24)}d`;
+  }
+</script>
+</body>
+</html>
