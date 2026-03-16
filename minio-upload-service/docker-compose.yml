@@ -1,11 +1,23 @@
 version: "3.9"
 
-# This compose file adds the upload microservice to your existing stack.
-# It assumes MinIO, PostgreSQL, and Hasura are already running (or defined
-# in a separate compose file). Adjust network names as needed.
+# ─────────────────────────────────────────────────────────────────────────────
+# Port / domain map (what to put in Cloudflare Tunnel):
+#
+#   Service              Local port   Cloudflare hostname (example)
+#   ─────────────────    ──────────   ───────────────────────────────────────
+#   Upload API           3001         https://api.yourdomain.com
+#   MinIO S3 API         9000         https://storage.yourdomain.com   ← REQUIRED
+#   MinIO Console        9001         https://minio-console.yourdomain.com (optional)
+#   Hasura               8080         https://hasura.yourdomain.com    (optional)
+#
+# CRITICAL: MinIO must know its public URL (MINIO_SERVER_URL) so that the
+# presigned PUT/GET URLs it generates contain "storage.yourdomain.com" and not
+# "localhost:9000". Without this the frontend cannot reach MinIO externally.
+# ─────────────────────────────────────────────────────────────────────────────
 
 services:
-  # ─── Upload microservice ───────────────────────────────────────────────────
+
+  # ─── Upload microservice ──────────────────────────────────────────────────
   minio-upload-service:
     build:
       context: .
@@ -17,14 +29,24 @@ services:
       - "3001:3001"
     environment:
       PORT: "3001"
-      S3_ENDPOINT: minio          # service name inside Docker network
+      API_KEY: ${API_KEY}
+
+      # Internal Docker network address — used for bucket verification & statObject
+      S3_ENDPOINT: minio
       S3_PORT: "9000"
       S3_USE_SSL: "false"
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET: ${S3_BUCKET:-files}
+
+      # PUBLIC MinIO URL — presigned URLs will contain this hostname.
+      # The frontend hits this URL directly when uploading/downloading.
+      # Must match the Cloudflare Tunnel hostname for MinIO (port 9000).
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:-https://storage.yourdomain.com}
+
       PRESIGNED_URL_EXPIRY_SECONDS: "900"
       MAX_FILE_SIZE_BYTES: "104857600"
+
       HASURA_GRAPHQL_URL: http://hasura:8080/v1/graphql
       HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
     networks:
@@ -39,19 +61,25 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── MinIO (include here if not defined elsewhere) ─────────────────────────
+  # ─── MinIO ────────────────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest
     container_name: minio
     restart: unless-stopped
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Console
+      - "9000:9000"   # S3 API  → tunnel to storage.yourdomain.com
+      - "9001:9001"   # Console → tunnel to minio-console.yourdomain.com (optional)
     volumes:
       - minio_data:/data
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # THIS IS THE CRITICAL SETTING:
+      # MinIO uses this URL when generating presigned URLs.
+      # Set it to whatever Cloudflare Tunnel hostname points at port 9000.
+      MINIO_SERVER_URL: ${S3_PUBLIC_URL:-https://storage.yourdomain.com}
+      # Allows the console to work behind a reverse proxy / tunnel
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_CONSOLE_URL:-https://minio-console.yourdomain.com}
     command: server /data --console-address ":9001"
     networks:
       - app_network
@@ -61,7 +89,7 @@ services:
       timeout: 5s
       retries: 3
 
-  # ─── PostgreSQL ────────────────────────────────────────────────────────────
+  # ─── PostgreSQL ───────────────────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
     container_name: postgres
@@ -81,7 +109,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── Hasura ────────────────────────────────────────────────────────────────
+  # ─── Hasura ───────────────────────────────────────────────────────────────
   hasura:
     image: hasura/graphql-engine:v2.36.0
     container_name: hasura
@@ -99,6 +127,32 @@ services:
         condition: service_healthy
     networks:
       - app_network
+
+  # ─── Cloudflare Tunnel ────────────────────────────────────────────────────
+  # This container establishes an outbound-only tunnel to Cloudflare.
+  # No inbound ports need to be opened on your firewall/router.
+  #
+  # Setup steps (one-time, on the host):
+  #   1. Install cloudflared:  https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+  #   2. Login:                cloudflared tunnel login
+  #   3. Create tunnel:        cloudflared tunnel create my-app
+  #      → Saves credentials JSON to ~/.cloudflared/<TUNNEL_ID>.json
+  #   4. Copy credentials:     cp ~/.cloudflared/<TUNNEL_ID>.json ./cloudflared/credentials.json
+  #   5. Edit cloudflared/config.yml with your tunnel ID and hostnames
+  #   6. Add DNS records:      cloudflared tunnel route dns my-app api.yourdomain.com
+  #                            cloudflared tunnel route dns my-app storage.yourdomain.com
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    networks:
+      - app_network
+    depends_on:
+      - minio-upload-service
+      - minio
 
 volumes:
   minio_data:

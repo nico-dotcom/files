@@ -3,6 +3,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { env } from "./config/env";
 import { verifyMinioBucket } from "./config/minio";
+import { requireApiKey } from "./middleware/apiKey";
 import createUploadRouter from "./routes/createUpload";
 import confirmUploadRouter from "./routes/confirmUpload";
 import createDownloadUrlRouter from "./routes/createDownloadUrl";
@@ -33,11 +34,11 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+// ─── Routes (all protected by API key except /health) ────────────────────────
 
-app.use("/", createUploadRouter);
-app.use("/", confirmUploadRouter);
-app.use("/", createDownloadUrlRouter);
+app.use("/", requireApiKey, createUploadRouter);
+app.use("/", requireApiKey, confirmUploadRouter);
+app.use("/", requireApiKey, createDownloadUrlRouter);
 
 // ─── 404 handler ─────────────────────────────────────────────────────────────
 

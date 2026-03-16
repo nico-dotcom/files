@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { minioClient } from "../config/minio";
+import { minioPublicClient } from "../config/minio";
 import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
 import { validateFileId } from "../middleware/validate";
@@ -84,7 +84,7 @@ router.post(
     // 2. Generate presigned GET URL
     let downloadUrl: string;
     try {
-      downloadUrl = await minioClient.presignedGetObject(
+      downloadUrl = await minioPublicClient.presignedGetObject(
         env.S3_BUCKET,
         fileRecord.object_key,
         env.PRESIGNED_URL_EXPIRY_SECONDS

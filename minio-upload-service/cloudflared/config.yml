@@ -1,0 +1,40 @@
+# Cloudflare Tunnel configuration
+# Replace TUNNEL_ID with the UUID from: cloudflared tunnel list
+# Replace yourdomain.com with your actual domain
+
+tunnel: TUNNEL_ID
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # ── Upload API (port 3001) ──────────────────────────────────────────────────
+  # All API calls from your frontend go here.
+  # Protected by API key middleware (Authorization: Bearer <API_KEY>).
+  - hostname: api.yourdomain.com
+    service: http://minio-upload-service:3001
+    originRequest:
+      connectTimeout: 10s
+      noTLSVerify: false
+
+  # ── MinIO S3 API (port 9000) ───────────────────────────────────────────────
+  # REQUIRED: The frontend PUTs files and GETs downloads directly here.
+  # MinIO presigned URLs will contain this hostname because of MINIO_SERVER_URL.
+  # No API key needed — the presigned URL signature IS the authentication.
+  - hostname: storage.yourdomain.com
+    service: http://minio:9000
+    originRequest:
+      connectTimeout: 30s
+      # Increase for large file uploads
+      tcpKeepAlive: 30s
+
+  # ── MinIO Console (port 9001) — OPTIONAL ──────────────────────────────────
+  # Access the MinIO web UI externally. Restrict via Cloudflare Access policy.
+  - hostname: minio-console.yourdomain.com
+    service: http://minio:9001
+
+  # ── Hasura Console (port 8080) — OPTIONAL ─────────────────────────────────
+  # Only expose if you need external Hasura access. Protect with Cloudflare Access.
+  # - hostname: hasura.yourdomain.com
+  #   service: http://hasura:8080
+
+  # Catch-all — required by cloudflared, returns 404 for unknown hostnames
+  - service: http_status:404

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { minioClient } from "../config/minio";
+import { minioClient, minioPublicClient } from "../config/minio";
 import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
 import { buildObjectKey } from "../utils/filename";
@@ -99,7 +99,7 @@ router.post(
     //    The frontend will PUT the file bytes directly to this URL.
     let uploadUrl: string;
     try {
-      uploadUrl = await minioClient.presignedPutObject(
+      uploadUrl = await minioPublicClient.presignedPutObject(
         env.S3_BUCKET,
         objectKey,
         env.PRESIGNED_URL_EXPIRY_SECONDS
