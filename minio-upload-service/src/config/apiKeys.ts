@@ -62,10 +62,21 @@ export async function findApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
 /**
  * Check whether a key has access to an object key given its prefix scope.
  *
+ * Object keys always follow the pattern:
+ *   uploads/<userId>/<folder>/<date>/<uuid>-<filename>
+ *
  * Rules:
- *   prefix = "*"          → access to everything
- *   prefix = "infopublica/" → objectKey must start with "uploads/.../infopublica/"
- *                             OR start with "infopublica/" exactly
+ *   keyPrefix = "*"            → access to every object
+ *   keyPrefix = "infopublica/" → object key must contain "/infopublica/" as an
+ *                                exact path segment (not as a substring)
+ *
+ * Examples:
+ *   isAllowedPrefix("infopublica/", "uploads/u1/infopublica/2024-01-01/f-doc.pdf")
+ *     → true  ✓
+ *   isAllowedPrefix("infopublica/", "uploads/u1/notinfopublica/2024-01-01/f-doc.pdf")
+ *     → false ✓  (avoids substring false positive)
+ *   isAllowedPrefix("pub/", "uploads/u1/infopublica/2024-01-01/f-doc.pdf")
+ *     → false ✓  (must be exact folder segment)
  */
 export function isAllowedPrefix(
   keyPrefix: string,
@@ -73,26 +84,14 @@ export function isAllowedPrefix(
 ): boolean {
   if (keyPrefix === "*") return true;
 
-  // Normalize: remove leading slash
-  const normalizedKey = objectKey.replace(/^\//, "");
-  const normalizedPrefix = keyPrefix.replace(/^\//, "");
+  // Normalize: strip leading/trailing slashes, lowercase
+  const folder = keyPrefix.replace(/^\/+|\/+$/g, "").toLowerCase();
+  if (!folder) return false;
 
-  // Direct match (objectKey starts with the prefix)
-  if (normalizedKey.startsWith(normalizedPrefix)) return true;
-
-  // Also match inside the uploads/<userId>/<date>/ nesting pattern:
-  // uploads/any-user-id/2024-01-15/fileId-infopublica/something.pdf
-  // We extract the "folder segment" after the date portion and check it
-  const uploadPattern = /^uploads\/[^/]+\/[^/]+\/[^/]+-(.+)$/;
-  const match = normalizedKey.match(uploadPattern);
-  if (match) {
-    // match[1] is the sanitized filename portion after the uuid-
-    // Check if the prefix is in the path segments
-    return normalizedKey.includes(`/${normalizedPrefix}`) ||
-           normalizedKey.includes(`-${normalizedPrefix}`);
-  }
-
-  return false;
+  // The object key must contain the exact folder segment: /<folder>/
+  // Using path segment boundaries (slashes) prevents substring attacks.
+  const normalizedKey = objectKey.toLowerCase();
+  return normalizedKey.includes(`/${folder}/`);
 }
 
 /** Create a new API key. Returns { record, rawKey } — rawKey is shown only once. */

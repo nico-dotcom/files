@@ -16,13 +16,13 @@ const app = express();
 
 app.use(
   helmet({
-    // Relax CSP for the dashboard (inline scripts needed)
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc:  ["'self'"],           // no unsafe-inline — scripts served as files
+        styleSrc:   ["'self'", "'unsafe-inline'"],  // inline styles only (no external CSS)
         connectSrc: ["'self'"],
+        imgSrc:     ["'self'", "data:"],
       },
     },
   })
@@ -30,7 +30,7 @@ app.use(
 
 app.use(express.json({ limit: "16kb" }));
 
-// Rate limiting — 60 req/min per IP
+// General rate limit — 60 req/min per IP
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -39,6 +39,17 @@ const limiter = rateLimit({
   message: { error: "Too many requests, please try again later" },
 });
 app.use(limiter);
+
+// Strict rate limit on admin endpoints — 10 req/15min per IP.
+// Prevents brute-force of the MASTER_API_KEY.
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many admin requests, please try again later" },
+  skipSuccessfulRequests: true,  // only count failed/suspicious requests
+});
 
 // ─── Health check (no auth) ───────────────────────────────────────────────────
 
@@ -55,9 +66,20 @@ app.get("/dashboard", (_req, res) => {
   res.sendFile(path.join(__dirname, "dashboard", "index.html"));
 });
 
+// Static files for the dashboard (JS files — served from /static/)
+app.use(
+  "/static",
+  express.static(path.join(__dirname, "dashboard"), {
+    // Cache JS for 1 hour — bump when deploying changes
+    maxAge: "1h",
+    index: false,        // don't serve index.html from /static/
+    dotfiles: "deny",    // never serve hidden files
+  })
+);
+
 // ─── Admin routes (master key required — enforced inside the router) ──────────
 
-app.use("/", adminKeysRouter);
+app.use("/admin", adminLimiter, adminKeysRouter);
 
 // ─── API routes (scoped API key required) ─────────────────────────────────────
 

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { minioClient, minioPublicClient } from "../config/minio";
 import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
-import { buildObjectKey } from "../utils/filename";
+import { buildObjectKey, sanitizeFolder } from "../utils/filename";
 import { validateCreateUpload } from "../middleware/validate";
 import { checkScope } from "../middleware/apiKey";
 
@@ -66,15 +66,25 @@ router.post(
   "/create-upload",
   validateCreateUpload,
   async (req: Request, res: Response): Promise<void> => {
-    const { filename, mimeType, sizeBytes, userId } = req.body as {
+    const { filename, mimeType, sizeBytes, userId, folder } = req.body as {
       filename: string;
       mimeType: string;
       sizeBytes: number;
       userId: string;
+      folder?: string;
     };
 
+    // Determine the effective folder:
+    // - If the API key has a specific prefix (e.g. "infopublica/"), use it.
+    // - If the key is global ("*"), use the folder from the request (default: "general").
+    const keyPrefix = req.apiKey?.prefix ?? "*";
+    const effectiveFolder =
+      keyPrefix === "*"
+        ? sanitizeFolder(folder ?? "general")
+        : sanitizeFolder(keyPrefix); // key prefix IS the folder
+
     const fileId = uuidv4();
-    const objectKey = buildObjectKey(userId, fileId, filename);
+    const objectKey = buildObjectKey(userId, fileId, filename, effectiveFolder);
 
     // Check that the API key's prefix scope covers this object key
     if (!checkScope(objectKey, "upload", req, res)) return;

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { findApiKey, isAllowedPrefix, ApiKeyRecord } from "../config/apiKeys";
+import { safeEqual } from "../utils/crypto";
 
 // Attach the resolved key record to the request so routes can read it
 declare global {
@@ -14,7 +15,7 @@ declare global {
  * Resolves the bearer token from the Authorization header against the
  * api_keys table. Attaches the key record to req.apiKey.
  *
- * Does NOT check prefix or operation — use requireScope() for that.
+ * Does NOT check prefix or operation — use checkScope() for that.
  * The /health and /dashboard routes skip this middleware entirely.
  */
 export async function requireApiKey(
@@ -22,7 +23,6 @@ export async function requireApiKey(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  // Master key bypass (for admin endpoints)
   const masterKey = process.env.MASTER_API_KEY;
   const authHeader = req.headers["authorization"];
 
@@ -33,8 +33,8 @@ export async function requireApiKey(
 
   const rawKey = authHeader.slice(7);
 
-  // Master key gets full access
-  if (masterKey && timingSafeEqual(rawKey, masterKey)) {
+  // Master key gets full access — uses constant-time comparison
+  if (masterKey && safeEqual(rawKey, masterKey)) {
     req.apiKey = {
       id: "master",
       name: "Master Key",
@@ -67,7 +67,7 @@ export async function requireApiKey(
 
 /**
  * Checks that req.apiKey has permission to access the given object key.
- * Call after requireApiKey.
+ * Must be called after requireApiKey middleware.
  */
 export function checkScope(
   objectKey: string,
@@ -99,13 +99,4 @@ export function checkScope(
   }
 
   return true;
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
 }

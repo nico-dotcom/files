@@ -9,18 +9,34 @@ function requireEnv(key: string): string {
   return value;
 }
 
+/**
+ * Require a secret env var and enforce a minimum length.
+ * Prevents accidental use of placeholder values like "changeme".
+ */
+function requireSecret(key: string, minLength = 32): string {
+  const value = requireEnv(key);
+  if (value.length < minLength) {
+    throw new Error(
+      `Environment variable ${key} is too short (${value.length} chars). ` +
+      `Minimum length is ${minLength} characters. ` +
+      `Generate one with: openssl rand -hex 32`
+    );
+  }
+  return value;
+}
+
 export const env = {
   PORT: parseInt(process.env.PORT || "3001", 10),
 
-  // API authentication
-  API_KEY: requireEnv("API_KEY"),
+  // Master key for the admin dashboard — minimum 32 chars enforced
+  MASTER_API_KEY: requireSecret("MASTER_API_KEY", 32),
 
   // MinIO
   S3_ENDPOINT: requireEnv("S3_ENDPOINT"),
   S3_PORT: parseInt(process.env.S3_PORT || "9000", 10),
   S3_USE_SSL: process.env.S3_USE_SSL === "true",
   S3_ACCESS_KEY: requireEnv("S3_ACCESS_KEY"),
-  S3_SECRET_KEY: requireEnv("S3_SECRET_KEY"),
+  S3_SECRET_KEY: requireSecret("S3_SECRET_KEY", 16),
   S3_BUCKET: requireEnv("S3_BUCKET"),
 
   // Public-facing MinIO URL for presigned URL generation (used with Cloudflare Tunnel).
@@ -36,7 +52,7 @@ export const env = {
 
   // Hasura
   HASURA_GRAPHQL_URL: requireEnv("HASURA_GRAPHQL_URL"),
-  HASURA_ADMIN_SECRET: requireEnv("HASURA_ADMIN_SECRET"),
+  HASURA_ADMIN_SECRET: requireSecret("HASURA_ADMIN_SECRET", 16),
 
   // Max file size in bytes (default: 100MB)
   MAX_FILE_SIZE_BYTES: parseInt(
@@ -44,3 +60,6 @@ export const env = {
     10
   ),
 };
+
+// Remove the old API_KEY reference — keys are now managed in the DB.
+// Delete this comment when refactoring is confirmed complete.

@@ -3,6 +3,7 @@ import { minioClient } from "../config/minio";
 import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
 import { validateFileId } from "../middleware/validate";
+import { checkScope } from "../middleware/apiKey";
 
 const router = Router();
 
@@ -92,6 +93,9 @@ router.post(
       });
       return;
     }
+
+    // Verify the API key's prefix scope covers this object key
+    if (!checkScope(fileRecord.object_key, "upload", req, res)) return;
 
     // 2. Verify the object really exists in MinIO.
     //    This prevents a client from confirming an upload that never happened.

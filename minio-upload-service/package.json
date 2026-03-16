@@ -4,7 +4,7 @@
   "description": "Secure file upload microservice using MinIO presigned URLs + Hasura",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && cp -r src/dashboard dist/dashboard",
+    "build": "tsc && cp -r src/dashboard dist/",
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "typecheck": "tsc --noEmit"

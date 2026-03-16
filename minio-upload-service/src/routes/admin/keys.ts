@@ -5,6 +5,7 @@
 import { Router, Request, Response } from "express";
 import { createApiKey, revokeApiKey, listApiKeys } from "../../config/apiKeys";
 import { isValidUuid } from "../../middleware/validate";
+import { safeEqual } from "../../utils/crypto";
 
 const router = Router();
 
@@ -19,23 +20,16 @@ function requireMaster(req: Request, res: Response): boolean {
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
 
-  if (!timingSafeEqual(token, master)) {
+  if (!safeEqual(token, master)) {
     res.status(403).json({ error: "Master key required" });
     return false;
   }
   return true;
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
 // ─── GET /admin/keys ─────────────────────────────────────────────────────────
 
-router.get("/admin/keys", async (req: Request, res: Response): Promise<void> => {
+router.get("/keys", async (req: Request, res: Response): Promise<void> => {
   if (!requireMaster(req, res)) return;
   try {
     const keys = await listApiKeys();
@@ -59,7 +53,7 @@ router.get("/admin/keys", async (req: Request, res: Response): Promise<void> => 
  *
  * The raw key is returned ONCE and never stored.
  */
-router.post("/admin/keys", async (req: Request, res: Response): Promise<void> => {
+router.post("/keys", async (req: Request, res: Response): Promise<void> => {
   if (!requireMaster(req, res)) return;
 
   const { name, prefix, can_upload, can_download, expires_at } = req.body;
@@ -118,7 +112,7 @@ router.post("/admin/keys", async (req: Request, res: Response): Promise<void> =>
 
 // ─── DELETE /admin/keys/:id ───────────────────────────────────────────────────
 
-router.delete("/admin/keys/:id", async (req: Request, res: Response): Promise<void> => {
+router.delete("/keys/:id", async (req: Request, res: Response): Promise<void> => {
   if (!requireMaster(req, res)) return;
 
   const { id } = req.params;
