@@ -1,0 +1,69 @@
+### Variables
+@baseUrl = http://localhost:3001
+@userId = 550e8400-e29b-41d4-a716-446655440000
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Health check
+# ─────────────────────────────────────────────────────────────────────────────
+
+GET {{baseUrl}}/health
+
+
+###
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 1 — Create upload (get presigned PUT URL)
+# ─────────────────────────────────────────────────────────────────────────────
+# Response will contain:
+#   fileId     — save this, you'll need it for confirm-upload
+#   uploadUrl  — PUT your file bytes here directly
+#   objectKey  — path inside the MinIO bucket
+
+POST {{baseUrl}}/create-upload
+Content-Type: application/json
+
+{
+  "filename": "my-document.pdf",
+  "mimeType": "application/pdf",
+  "sizeBytes": 204800,
+  "userId": "{{userId}}"
+}
+
+
+###
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 2 — Upload directly to MinIO
+# Replace {{uploadUrl}} with the uploadUrl from the previous response.
+# This call goes straight to MinIO — NOT through your backend.
+# ─────────────────────────────────────────────────────────────────────────────
+
+PUT {{uploadUrl}}
+Content-Type: application/pdf
+
+< ./sample.pdf
+
+
+###
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 3 — Confirm upload
+# Replace {{fileId}} with the fileId from step 1.
+# ─────────────────────────────────────────────────────────────────────────────
+
+POST {{baseUrl}}/confirm-upload
+Content-Type: application/json
+
+{
+  "fileId": "{{fileId}}"
+}
+
+
+###
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 4 — Get a presigned download URL
+# ─────────────────────────────────────────────────────────────────────────────
+
+POST {{baseUrl}}/create-download-url
+Content-Type: application/json
+
+{
+  "fileId": "{{fileId}}"
+}

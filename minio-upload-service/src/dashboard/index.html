@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Keys Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2a2d3e;
+      --primary:  #6c63ff;
+      --primary-h:#8b84ff;
+      --danger:   #ff4d4d;
+      --success:  #22c55e;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --mono:     'Fira Mono', 'Consolas', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; }
+    header span { color: var(--muted); font-size: 12px; }
+
+    main { max-width: 960px; margin: 32px auto; padding: 0 24px; }
+
+    /* Auth screen */
+    #auth-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 16px;
+    }
+    #auth-screen h2 { font-size: 20px; }
+    #auth-screen p { color: var(--muted); }
+    #auth-screen input {
+      width: 360px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--mono);
+    }
+
+    /* Sections */
+    section { margin-bottom: 32px; }
+    section h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+
+    /* Create form */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .form-grid input, .form-grid select {
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .form-grid input:focus, .form-grid select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    .form-row-full { grid-column: 1 / -1; display: flex; gap: 12px; }
+    .form-row-full label { flex: 1; }
+
+    /* Buttons */
+    button {
+      padding: 8px 18px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity .15s;
+    }
+    button:hover { opacity: .85; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-danger  { background: var(--danger);  color: #fff; padding: 4px 10px; font-size: 12px; }
+    .btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-submit  { grid-column: 1/-1; justify-self: start; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--surface); }
+    th { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(108,99,255,.04); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-green  { background: rgba(34,197,94,.15); color: #4ade80; }
+    .badge-red    { background: rgba(255,77,77,.15);  color: #f87171; }
+    .badge-purple { background: rgba(108,99,255,.15); color: var(--primary-h); }
+    .badge-blue   { background: rgba(59,130,246,.15); color: #60a5fa; }
+
+    code {
+      font-family: var(--mono);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* New key modal */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px;
+      max-width: 560px;
+      width: 100%;
+    }
+    .modal h3 { margin-bottom: 8px; font-size: 16px; color: var(--success); }
+    .modal p  { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+    .key-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      word-break: break-all;
+      color: var(--primary-h);
+      margin-bottom: 16px;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .2s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    #toast.show { opacity: 1; }
+    #toast.ok   { border-color: var(--success); color: var(--success); }
+    #toast.err  { border-color: var(--danger);  color: var(--danger); }
+
+    .empty { text-align: center; padding: 32px; color: var(--muted); }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2">
+    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+  <h1>API Keys</h1>
+  <span id="api-url-label"></span>
+</header>
+
+<!-- ── Auth screen ──────────────────────────────────────────────────────────── -->
+<div id="auth-screen">
+  <h2>Ingresá la Master Key</h2>
+  <p>Solo se usa para gestionar keys — nunca se envía al frontend.</p>
+  <input id="master-input" type="password" placeholder="sk_... o tu MASTER_API_KEY" />
+  <button class="btn-primary" id="btn-login">Entrar</button>
+</div>
+
+<!-- ── Main content ─────────────────────────────────────────────────────────── -->
+<main id="app" style="display:none">
+
+  <!-- Create form -->
+  <section>
+    <h2>Nueva API Key</h2>
+    <div class="form-grid">
+
+      <label>
+        Nombre / descripción
+        <input id="f-name" type="text" placeholder="Frontend – infopublica" />
+      </label>
+
+      <label>
+        Prefijo de carpeta (scope)
+        <input id="f-prefix" type="text" placeholder="infopublica/ o *" value="*" />
+      </label>
+
+      <label>
+        Expira el (opcional)
+        <input id="f-expires" type="datetime-local" />
+      </label>
+
+      <label>
+        Operaciones
+        <select id="f-ops">
+          <option value="both">Subir y descargar</option>
+          <option value="upload">Solo subir</option>
+          <option value="download">Solo descargar</option>
+        </select>
+      </label>
+
+      <div class="btn-submit">
+        <button class="btn-primary" id="btn-create-key">Generar key</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Keys table -->
+  <section>
+    <h2>Keys activas</h2>
+    <table id="keys-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Prefijo</th>
+          <th>Operaciones</th>
+          <th>Último uso</th>
+          <th>Expira</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="keys-body">
+        <tr><td colspan="7" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<!-- ── New key modal ─────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3>✓ Key creada exitosamente</h3>
+    <p>Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.</p>
+    <div class="key-box" id="modal-key"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="btn-copy-key">Copiar</button>
+      <button class="btn-primary" id="btn-close-modal">Listo, ya la copié</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- All logic is in /static/dashboard.js — no inline scripts needed -->
+<script src="/static/dashboard.js" defer></script>
+<!-- Button wiring — uses IDs so no inline onclick handlers needed -->
+<script src="/static/dashboard-init.js" defer></script>
+</body>
+</html>

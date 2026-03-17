@@ -1,0 +1,3 @@
+# Never commit tunnel credentials — they give full tunnel control
+credentials.json
+cert.pem
