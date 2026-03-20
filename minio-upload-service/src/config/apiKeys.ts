@@ -3,9 +3,11 @@
  *
  * We never store raw keys — only SHA-256 hashes.
  * The raw key is returned once at creation and never stored.
+ *
+ * All persistence goes through Hasura GraphQL (no direct DB connection).
  */
 import crypto from "crypto";
-import { db } from "./db";
+import { hasuraQuery } from "./hasura";
 
 export interface ApiKeyRecord {
   id: string;
@@ -31,29 +33,39 @@ export function generateRawKey(): string {
 
 /**
  * Look up an API key record by the raw bearer token.
- * Updates last_used_at on successful lookup.
+ * Updates last_used_at on successful lookup (fire-and-forget).
  * Returns null if not found, revoked, or expired.
  */
 export async function findApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
   const hash = hashKey(rawKey);
+  const now = new Date().toISOString();
 
-  const result = await db.query<ApiKeyRecord>(
-    `SELECT id, name, prefix, can_upload, can_download, is_active, expires_at, created_at, last_used_at
-     FROM public.api_keys
-     WHERE key_hash = $1
-       AND is_active = true
-       AND (expires_at IS NULL OR expires_at > now())`,
-    [hash]
+  const data = await hasuraQuery<{ api_keys: ApiKeyRecord[] }>(
+    `query FindApiKey($key_hash: String!, $now: timestamptz!) {
+      api_keys(where: {
+        key_hash: { _eq: $key_hash }
+        is_active: { _eq: true }
+        _or: [
+          { expires_at: { _is_null: true } }
+          { expires_at: { _gt: $now } }
+        ]
+      }) {
+        id name prefix can_upload can_download is_active expires_at created_at last_used_at
+      }
+    }`,
+    { key_hash: hash, now }
   );
 
-  if (result.rows.length === 0) return null;
+  if (data.api_keys.length === 0) return null;
 
-  const key = result.rows[0];
+  const key = data.api_keys[0];
 
   // Update last_used_at in the background — don't await to avoid latency
-  db.query(
-    "UPDATE public.api_keys SET last_used_at = now() WHERE id = $1",
-    [key.id]
+  hasuraQuery(
+    `mutation UpdateLastUsed($id: uuid!, $now: timestamptz!) {
+      update_api_keys_by_pk(pk_columns: { id: $id }, _set: { last_used_at: $now }) { id }
+    }`,
+    { id: key.id, now }
   ).catch(() => {/* ignore */});
 
   return key;
@@ -89,7 +101,6 @@ export function isAllowedPrefix(
   if (!folder) return false;
 
   // The object key must contain the exact folder segment: /<folder>/
-  // Using path segment boundaries (slashes) prevents substring attacks.
   const normalizedKey = objectKey.toLowerCase();
   return normalizedKey.includes(`/${folder}/`);
 }
@@ -105,38 +116,50 @@ export async function createApiKey(params: {
   const rawKey = generateRawKey();
   const keyHash = hashKey(rawKey);
 
-  const result = await db.query<ApiKeyRecord & { key_hash: string }>(
-    `INSERT INTO public.api_keys (key_hash, name, prefix, can_upload, can_download, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, name, prefix, can_upload, can_download, is_active, expires_at, created_at, last_used_at, key_hash`,
-    [
-      keyHash,
-      params.name,
-      params.prefix,
-      params.can_upload ?? true,
-      params.can_download ?? true,
-      params.expires_at ?? null,
-    ]
+  const data = await hasuraQuery<{
+    insert_api_keys_one: ApiKeyRecord & { key_hash: string };
+  }>(
+    `mutation CreateApiKey($object: api_keys_insert_input!) {
+      insert_api_keys_one(object: $object) {
+        id name prefix can_upload can_download is_active expires_at created_at last_used_at key_hash
+      }
+    }`,
+    {
+      object: {
+        key_hash: keyHash,
+        name: params.name,
+        prefix: params.prefix,
+        can_upload: params.can_upload ?? true,
+        can_download: params.can_download ?? true,
+        expires_at: params.expires_at ?? null,
+      },
+    }
   );
 
-  return { record: result.rows[0], rawKey };
+  return { record: data.insert_api_keys_one, rawKey };
 }
 
 /** Revoke (soft-delete) a key by id */
 export async function revokeApiKey(id: string): Promise<boolean> {
-  const result = await db.query(
-    "UPDATE public.api_keys SET is_active = false WHERE id = $1",
-    [id]
+  const data = await hasuraQuery<{
+    update_api_keys_by_pk: { id: string } | null;
+  }>(
+    `mutation RevokeApiKey($id: uuid!) {
+      update_api_keys_by_pk(pk_columns: { id: $id }, _set: { is_active: false }) { id }
+    }`,
+    { id }
   );
-  return (result.rowCount ?? 0) > 0;
+  return data.update_api_keys_by_pk !== null;
 }
 
-/** List all keys (never returns key_hash raw, hides it) */
+/** List all keys (never returns key_hash) */
 export async function listApiKeys(): Promise<ApiKeyRecord[]> {
-  const result = await db.query<ApiKeyRecord>(
-    `SELECT id, name, prefix, can_upload, can_download, is_active, expires_at, created_at, last_used_at
-     FROM public.api_keys
-     ORDER BY created_at DESC`
+  const data = await hasuraQuery<{ api_keys: ApiKeyRecord[] }>(
+    `query ListApiKeys {
+      api_keys(order_by: { created_at: desc }) {
+        id name prefix can_upload can_download is_active expires_at created_at last_used_at
+      }
+    }`
   );
-  return result.rows;
+  return data.api_keys;
 }
