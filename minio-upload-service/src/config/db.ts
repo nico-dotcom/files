@@ -16,6 +16,8 @@ export const db = new Pool({
   database: requireEnv("POSTGRES_DB"),
   user: requireEnv("POSTGRES_USER"),
   password: requireEnv("POSTGRES_PASSWORD"),
+  // Set POSTGRES_SSL=true to enforce encrypted connections (recommended in production).
+  ssl: process.env.POSTGRES_SSL === "true" ? { rejectUnauthorized: false } : false,
   max: 5,
   idleTimeoutMillis: 30_000,
 });

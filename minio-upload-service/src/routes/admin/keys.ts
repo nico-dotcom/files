@@ -77,9 +77,20 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  if (typeof can_upload !== "boolean") {
+    res.status(400).json({ error: "can_upload must be a boolean" });
+    return;
+  }
+
+  if (typeof can_download !== "boolean") {
+    res.status(400).json({ error: "can_download must be a boolean" });
+    return;
+  }
+
   if (expires_at !== undefined && expires_at !== null) {
-    if (isNaN(Date.parse(expires_at))) {
-      res.status(400).json({ error: "expires_at must be a valid ISO date string" });
+    const expiryDate = new Date(expires_at);
+    if (isNaN(expiryDate.getTime()) || expiryDate <= new Date()) {
+      res.status(400).json({ error: "expires_at must be a valid ISO date in the future" });
       return;
     }
   }
@@ -88,8 +99,8 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
     const { record, rawKey } = await createApiKey({
       name: name.trim(),
       prefix: cleanPrefix,
-      can_upload: can_upload !== false,
-      can_download: can_download !== false,
+      can_upload,
+      can_download,
       expires_at: expires_at ?? null,
     });
 

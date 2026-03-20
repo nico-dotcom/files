@@ -49,7 +49,6 @@ const adminLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many admin requests, please try again later" },
-  skipSuccessfulRequests: true,  // only count failed/suspicious requests
 });
 
 // ─── Health check (no auth) ───────────────────────────────────────────────────
