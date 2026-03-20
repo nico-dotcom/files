@@ -77,7 +77,7 @@ router.post(
 
     if (fileRecord.status !== "uploaded") {
       res.status(422).json({
-        error: `File is not yet available for download (status: "${fileRecord.status}")`,
+        error: "File is not available for download",
       });
       return;
     }

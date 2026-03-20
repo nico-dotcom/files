@@ -89,7 +89,7 @@ router.post(
 
     if (fileRecord.status !== "pending") {
       res.status(409).json({
-        error: `File is already in status "${fileRecord.status}"`,
+        error: "File cannot be confirmed in its current state",
       });
       return;
     }
@@ -105,8 +105,7 @@ router.post(
       const minioErr = err as { code?: string };
       if (minioErr.code === "NotFound") {
         res.status(422).json({
-          error:
-            "Object not found in storage. Complete the upload before confirming.",
+          error: "Upload not found in storage",
         });
       } else {
         console.error("[confirm-upload] MinIO stat failed:", err);

@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { env } from "./config/env";
 import { verifyMinioBucket } from "./config/minio";
+import { runMigrations } from "./config/migrate";
 import { requireApiKey } from "./middleware/apiKey";
 import createUploadRouter from "./routes/createUpload";
 import confirmUploadRouter from "./routes/confirmUpload";
@@ -48,7 +49,6 @@ const adminLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many admin requests, please try again later" },
-  skipSuccessfulRequests: true,  // only count failed/suspicious requests
 });
 
 // ─── Health check (no auth) ───────────────────────────────────────────────────
@@ -112,6 +112,7 @@ app.use(
 
 async function start(): Promise<void> {
   try {
+    await runMigrations();
     await verifyMinioBucket();
     app.listen(env.PORT, () => {
       console.log(`✓ minio-upload-service listening on port ${env.PORT}`);

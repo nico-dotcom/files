@@ -8,6 +8,7 @@ COPY package*.json tsconfig.json ./
 RUN npm ci --ignore-scripts
 
 COPY src ./src
+COPY migrations ./migrations
 RUN npm run build
 # dashboard HTML is copied into dist/ by the build script above
 
@@ -20,8 +21,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
-# Copy compiled output from build stage
+# Copy compiled output and SQL migration files from build stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/migrations ./migrations
 
 # Run as non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
