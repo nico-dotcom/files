@@ -7,7 +7,8 @@ interface GraphQLResponse<T> {
 
 /**
  * Minimal GraphQL client for Hasura.
- * Uses the admin secret — keep this server-side only, never expose to frontend.
+ * Authenticates with the admin secret but operates under the service role,
+ * which only has permissions on the tables this service needs.
  */
 export async function hasuraQuery<T>(
   query: string,
@@ -18,6 +19,9 @@ export async function hasuraQuery<T>(
     headers: {
       "Content-Type": "application/json",
       "x-hasura-admin-secret": env.HASURA_ADMIN_SECRET,
+      // Restricts operations to the permissions defined for this role,
+      // even though we're authenticated with the admin secret.
+      "x-hasura-role": env.HASURA_SERVICE_ROLE,
     },
     body: JSON.stringify({ query, variables }),
   });

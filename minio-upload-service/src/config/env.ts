@@ -53,6 +53,8 @@ export const env = {
   // Hasura
   HASURA_GRAPHQL_URL: requireEnv("HASURA_GRAPHQL_URL"),
   HASURA_ADMIN_SECRET: requireSecret("HASURA_ADMIN_SECRET", 16),
+  // Role with limited permissions (only api_keys table) — used for data queries
+  HASURA_SERVICE_ROLE: process.env.HASURA_SERVICE_ROLE || "upload_service",
 
   // Max file size in bytes (default: 100MB)
   MAX_FILE_SIZE_BYTES: parseInt(
