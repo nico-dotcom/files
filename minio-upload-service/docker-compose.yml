@@ -30,11 +30,6 @@ services:
     environment:
       PORT: "3001"
       MASTER_API_KEY: ${MASTER_API_KEY}
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      POSTGRES_DB: ${POSTGRES_DB:-appdb}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
       # Internal Docker network address — used for bucket verification & statObject
       S3_ENDPOINT: minio
@@ -59,6 +54,7 @@ services:
     depends_on:
       - minio
       - hasura
+
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
       interval: 30s
@@ -94,27 +90,6 @@ services:
       timeout: 5s
       retries: 3
 
-  # ─── PostgreSQL ───────────────────────────────────────────────────────────
-  postgres:
-    image: postgres:15-alpine
-    container_name: postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-appdb}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
-      - ./sql/api_keys.sql:/docker-entrypoint-initdb.d/02_api_keys.sql:ro
-    networks:
-      - app_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ─── Hasura ───────────────────────────────────────────────────────────────
   hasura:
     image: hasura/graphql-engine:v2.36.0
@@ -123,14 +98,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      HASURA_GRAPHQL_DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-appdb}
+      HASURA_GRAPHQL_DATABASE_URL: ${HASURA_GRAPHQL_DATABASE_URL}
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_DEV_MODE: "false"
       HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: public
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - app_network
 
@@ -162,7 +134,6 @@ services:
 
 volumes:
   minio_data:
-  postgres_data:
 
 networks:
   app_network:

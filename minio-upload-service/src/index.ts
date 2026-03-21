@@ -4,7 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { env } from "./config/env";
 import { verifyMinioBucket } from "./config/minio";
-import { runMigrations } from "./config/migrate";
+import { ensureSchema } from "./config/setup";
 import { requireApiKey } from "./middleware/apiKey";
 import createUploadRouter from "./routes/createUpload";
 import confirmUploadRouter from "./routes/confirmUpload";
@@ -112,7 +112,7 @@ app.use(
 
 async function start(): Promise<void> {
   try {
-    await runMigrations();
+    await ensureSchema();
     await verifyMinioBucket();
     app.listen(env.PORT, () => {
       console.log(`✓ minio-upload-service listening on port ${env.PORT}`);
