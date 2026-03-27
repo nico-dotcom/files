@@ -80,8 +80,7 @@ app.get("/test", (_req, res) => {
 app.use(
   "/static",
   express.static(path.join(__dirname, "dashboard"), {
-    // Cache JS for 1 hour — bump when deploying changes
-    maxAge: "1h",
+    maxAge: 0,           // no browser cache — always fetch fresh JS/CSS
     index: false,        // don't serve index.html from /static/
     dotfiles: "deny",    // never serve hidden files
   })
