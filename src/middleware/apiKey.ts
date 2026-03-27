@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { findApiKey, isAllowedPrefix, ApiKeyRecord } from "../config/apiKeys";
+import { findApiKey, isAllowed, ApiKeyRecord } from "../config/apiKeys";
 import { safeEqual } from "../utils/crypto";
 
 // Attach the resolved key record to the request so routes can read it
@@ -45,6 +45,7 @@ export async function requireApiKey(
       expires_at: null,
       created_at: new Date().toISOString(),
       last_used_at: null,
+      folders: [],
     };
     next();
     return;
@@ -91,9 +92,12 @@ export function checkScope(
     return false;
   }
 
-  if (!isAllowedPrefix(key.prefix, objectKey)) {
+  if (!isAllowed(key, objectKey)) {
+    const scope = key.folders?.length
+      ? key.folders.map(f => f.name).join(", ")
+      : key.prefix;
     res.status(403).json({
-      error: `Access denied: this key is scoped to prefix "${key.prefix}"`,
+      error: `Access denied: this key is scoped to "${scope}"`,
     });
     return false;
   }

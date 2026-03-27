@@ -192,6 +192,18 @@
     .empty { text-align: center; padding: 32px; color: var(--muted); }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .folder-form-row { display: flex; gap: 10px; margin-bottom: 12px; }
+    .folder-form-row input { flex: 1; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
+    .folder-form-row input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+    .folder-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 44px; }
+    .folder-checkbox-item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+    .folder-checkbox-item input[type=checkbox] { cursor: pointer; accent-color: var(--primary); }
+    .folder-checkbox-item:has(input:checked) { border-color: var(--primary); background: rgba(108,99,255,.06); }
+
+    .global-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
+    .global-row input[type=checkbox] { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -215,24 +227,35 @@
 <!-- ── Main content ─────────────────────────────────────────────────────────── -->
 <main id="app" style="display:none">
 
-  <!-- Create form -->
+  <!-- Folders section -->
+  <section>
+    <h2>Carpetas</h2>
+    <div class="folder-form-row">
+      <input id="f-folder-name" type="text" placeholder="facturas, imagenes/perfil, documentos/2024…" />
+      <button class="btn-primary" id="btn-create-folder">Crear carpeta</button>
+    </div>
+    <table id="folders-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Creada</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="folders-body">
+        <tr><td colspan="3" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Create key form -->
   <section>
     <h2>Nueva API Key</h2>
     <div class="form-grid">
 
       <label>
         Nombre / descripción
-        <input id="f-name" type="text" placeholder="Frontend – infopublica" />
-      </label>
-
-      <label>
-        Prefijo de carpeta (scope)
-        <input id="f-prefix" type="text" placeholder="infopublica/ o *" value="*" />
-      </label>
-
-      <label>
-        Expira el (opcional)
-        <input id="f-expires" type="datetime-local" />
+        <input id="f-name" type="text" placeholder="Frontend – facturas" />
       </label>
 
       <label>
@@ -243,6 +266,25 @@
           <option value="download">Solo descargar</option>
         </select>
       </label>
+
+      <label>
+        Expira el (opcional)
+        <input id="f-expires" type="datetime-local" />
+      </label>
+
+      <div style="display:flex; align-items:center; padding-top:18px;">
+        <label class="global-row">
+          <input type="checkbox" id="f-global" checked />
+          Acceso global (todas las carpetas)
+        </label>
+      </div>
+
+      <div id="folder-select-wrapper" style="display:none; grid-column:1/-1;">
+        <div style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Carpetas con acceso</div>
+        <div class="folder-checkboxes" id="folder-checkboxes">
+          <span style="color:var(--muted); font-size:13px;">No hay carpetas creadas todavía.</span>
+        </div>
+      </div>
 
       <div class="btn-submit">
         <button class="btn-primary" id="btn-create-key">Generar key</button>
@@ -257,7 +299,7 @@
       <thead>
         <tr>
           <th>Nombre</th>
-          <th>Prefijo</th>
+          <th>Carpetas</th>
           <th>Operaciones</th>
           <th>Último uso</th>
           <th>Expira</th>

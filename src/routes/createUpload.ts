@@ -76,13 +76,30 @@ router.post(
     };
 
     // Determine the effective folder:
-    // - If the API key has a specific prefix (e.g. "infopublica/"), use it.
-    // - If the key is global ("*"), use the folder from the request (default: "general").
+    // - Global key (prefix "*", no folders): use folder param or default "general"
+    // - Folder-based key (has folders assigned):
+    //     1 folder  → use it automatically
+    //     N folders → require folder param, must be one of the assigned folders
+    // - Legacy prefix key: prefix IS the folder
     const keyPrefix = req.apiKey?.prefix ?? "*";
-    const effectiveFolder =
-      keyPrefix === "*"
-        ? sanitizeFolder(folder ?? "general")
-        : sanitizeFolder(keyPrefix); // key prefix IS the folder
+    const keyFolders = req.apiKey?.folders ?? [];
+
+    let effectiveFolder: string;
+    if (keyPrefix === "*" && keyFolders.length === 0) {
+      effectiveFolder = sanitizeFolder(folder ?? "general");
+    } else if (keyFolders.length > 0) {
+      if (keyFolders.length === 1) {
+        effectiveFolder = sanitizeFolder(keyFolders[0].name);
+      } else if (folder) {
+        effectiveFolder = sanitizeFolder(folder);
+      } else {
+        res.status(400).json({ error: "folder parameter required: this key has access to multiple folders" });
+        return;
+      }
+    } else {
+      // Legacy: prefix IS the folder
+      effectiveFolder = sanitizeFolder(keyPrefix);
+    }
 
     const fileId = uuidv4();
     const objectKey = buildObjectKey(userId, fileId, filename, effectiveFolder);

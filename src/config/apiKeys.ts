@@ -8,6 +8,9 @@
  */
 import crypto from "crypto";
 import { hasuraQuery } from "./hasura";
+import type { FolderRecord } from "./folders";
+
+export type { FolderRecord };
 
 export interface ApiKeyRecord {
   id: string;
@@ -19,6 +22,7 @@ export interface ApiKeyRecord {
   expires_at: string | null;
   created_at: string;
   last_used_at: string | null;
+  folders: FolderRecord[];
 }
 
 /** SHA-256 hex digest of the raw bearer token */
@@ -31,6 +35,21 @@ export function generateRawKey(): string {
   return "sk_" + crypto.randomBytes(32).toString("hex");
 }
 
+// ─── GraphQL fragments ───────────────────────────────────────────────────────
+
+const API_KEY_FIELDS = `
+  id name prefix can_upload can_download is_active expires_at created_at last_used_at
+  api_key_folders {
+    folder { id name created_at }
+  }
+`;
+
+function mapFolders(raw: { api_key_folders?: { folder: FolderRecord }[] }): FolderRecord[] {
+  return raw.api_key_folders?.map(akf => akf.folder) ?? [];
+}
+
+// ─── Lookup ──────────────────────────────────────────────────────────────────
+
 /**
  * Look up an API key record by the raw bearer token.
  * Updates last_used_at on successful lookup (fire-and-forget).
@@ -40,7 +59,7 @@ export async function findApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
   const hash = hashKey(rawKey);
   const now = new Date().toISOString();
 
-  const data = await hasuraQuery<{ api_keys: ApiKeyRecord[] }>(
+  const data = await hasuraQuery<{ api_keys: Array<ApiKeyRecord & { api_key_folders: { folder: FolderRecord }[] }> }>(
     `query FindApiKey($key_hash: String!, $now: timestamptz!) {
       api_keys(where: {
         key_hash: { _eq: $key_hash }
@@ -49,16 +68,15 @@ export async function findApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
           { expires_at: { _is_null: true } }
           { expires_at: { _gt: $now } }
         ]
-      }) {
-        id name prefix can_upload can_download is_active expires_at created_at last_used_at
-      }
+      }) { ${API_KEY_FIELDS} }
     }`,
     { key_hash: hash, now }
   );
 
   if (data.api_keys.length === 0) return null;
 
-  const key = data.api_keys[0];
+  const raw = data.api_keys[0];
+  const key: ApiKeyRecord = { ...raw, folders: mapFolders(raw) };
 
   // Update last_used_at in the background — don't await to avoid latency
   hasuraQuery(
@@ -71,38 +89,53 @@ export async function findApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
   return key;
 }
 
+// ─── Scope checking ──────────────────────────────────────────────────────────
+
 /**
- * Check whether a key has access to an object key given its prefix scope.
- *
- * Object keys always follow the pattern:
- *   uploads/<userId>/<folder>/<date>/<uuid>-<filename>
+ * Check whether a key has access to an object key given its prefix/folder scope.
  *
  * Rules:
- *   keyPrefix = "*"            → access to every object
- *   keyPrefix = "infopublica/" → object key must contain "/infopublica/" as an
- *                                exact path segment (not as a substring)
- *
- * Examples:
- *   isAllowedPrefix("infopublica/", "uploads/u1/infopublica/2024-01-01/f-doc.pdf")
- *     → true  ✓
- *   isAllowedPrefix("infopublica/", "uploads/u1/notinfopublica/2024-01-01/f-doc.pdf")
- *     → false ✓  (avoids substring false positive)
- *   isAllowedPrefix("pub/", "uploads/u1/infopublica/2024-01-01/f-doc.pdf")
- *     → false ✓  (must be exact folder segment)
+ *   prefix = "*"         → access to every object (global key, no folders)
+ *   key has folders      → object key must contain one of the folder names as an exact path segment
+ *   legacy prefix        → original prefix-based check
  */
-export function isAllowedPrefix(
-  keyPrefix: string,
-  objectKey: string
-): boolean {
+export function isAllowed(key: ApiKeyRecord, objectKey: string): boolean {
+  if (key.prefix === "*") return true;
+
+  if (key.folders && key.folders.length > 0) {
+    return key.folders.some(f => isAllowedPrefix(f.name + "/", objectKey));
+  }
+
+  // Legacy fallback: use prefix field directly
+  return isAllowedPrefix(key.prefix, objectKey);
+}
+
+/**
+ * Check whether a single prefix string covers the given object key.
+ * Exported for backwards compatibility.
+ */
+export function isAllowedPrefix(keyPrefix: string, objectKey: string): boolean {
   if (keyPrefix === "*") return true;
 
-  // Normalize: strip leading/trailing slashes, lowercase
   const folder = keyPrefix.replace(/^\/+|\/+$/g, "").toLowerCase();
   if (!folder) return false;
 
-  // The object key must contain the exact folder segment: /<folder>/
-  const normalizedKey = objectKey.toLowerCase();
-  return normalizedKey.includes(`/${folder}/`);
+  return objectKey.toLowerCase().includes(`/${folder}/`);
+}
+
+// ─── CRUD ────────────────────────────────────────────────────────────────────
+
+/** Get a single key by ID */
+export async function getApiKeyById(id: string): Promise<ApiKeyRecord | null> {
+  const data = await hasuraQuery<{ api_keys_by_pk: (ApiKeyRecord & { api_key_folders: { folder: FolderRecord }[] }) | null }>(
+    `query GetApiKeyById($id: uuid!) {
+      api_keys_by_pk(id: $id) { ${API_KEY_FIELDS} }
+    }`,
+    { id }
+  );
+  if (!data.api_keys_by_pk) return null;
+  const raw = data.api_keys_by_pk;
+  return { ...raw, folders: mapFolders(raw) };
 }
 
 /** Create a new API key. Returns { record, rawKey } — rawKey is shown only once. */
@@ -112,6 +145,7 @@ export async function createApiKey(params: {
   can_upload?: boolean;
   can_download?: boolean;
   expires_at?: string | null;
+  folder_ids?: string[];
 }): Promise<{ record: ApiKeyRecord & { key_hash: string }; rawKey: string }> {
   const rawKey = generateRawKey();
   const keyHash = hashKey(rawKey);
@@ -136,7 +170,23 @@ export async function createApiKey(params: {
     }
   );
 
-  return { record: data.insert_api_keys_one, rawKey };
+  const record = data.insert_api_keys_one;
+
+  // Assign folders if provided
+  if (params.folder_ids && params.folder_ids.length > 0) {
+    const objects = params.folder_ids.map(folder_id => ({
+      api_key_id: record.id,
+      folder_id,
+    }));
+    await hasuraQuery(
+      `mutation InsertApiKeyFolders($objects: [api_key_folders_insert_input!]!) {
+        insert_api_key_folders(objects: $objects) { affected_rows }
+      }`,
+      { objects }
+    );
+  }
+
+  return { record: { ...record, folders: [] }, rawKey };
 }
 
 /** Revoke (soft-delete) a key by id */
@@ -152,27 +202,12 @@ export async function revokeApiKey(id: string): Promise<boolean> {
   return data.update_api_keys_by_pk !== null;
 }
 
-/** Get a single key by ID (never returns key_hash) */
-export async function getApiKeyById(id: string): Promise<ApiKeyRecord | null> {
-  const data = await hasuraQuery<{ api_keys_by_pk: ApiKeyRecord | null }>(
-    `query GetApiKeyById($id: uuid!) {
-      api_keys_by_pk(id: $id) {
-        id name prefix can_upload can_download is_active expires_at created_at last_used_at
-      }
-    }`,
-    { id }
-  );
-  return data.api_keys_by_pk;
-}
-
 /** List all keys (never returns key_hash) */
 export async function listApiKeys(): Promise<ApiKeyRecord[]> {
-  const data = await hasuraQuery<{ api_keys: ApiKeyRecord[] }>(
+  const data = await hasuraQuery<{ api_keys: Array<ApiKeyRecord & { api_key_folders: { folder: FolderRecord }[] }> }>(
     `query ListApiKeys {
-      api_keys(order_by: { created_at: desc }) {
-        id name prefix can_upload can_download is_active expires_at created_at last_used_at
-      }
+      api_keys(order_by: { created_at: desc }) { ${API_KEY_FIELDS} }
     }`
   );
-  return data.api_keys;
+  return data.api_keys.map(raw => ({ ...raw, folders: mapFolders(raw) }));
 }

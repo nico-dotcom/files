@@ -56,25 +56,31 @@ router.get("/keys", async (req: Request, res: Response): Promise<void> => {
 router.post("/keys", async (req: Request, res: Response): Promise<void> => {
   if (!requireMaster(req, res)) return;
 
-  const { name, prefix, can_upload, can_download, expires_at } = req.body;
+  const { name, prefix, can_upload, can_download, expires_at, folder_ids } = req.body;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     res.status(400).json({ error: "name is required" });
     return;
   }
 
-  if (typeof prefix !== "string" || prefix.trim().length === 0) {
-    res.status(400).json({ error: "prefix is required (use \"*\" for full access)" });
-    return;
-  }
+  // prefix is optional — if not provided and folder_ids provided, key is folder-based
+  const isGlobal = !folder_ids || (Array.isArray(folder_ids) && folder_ids.length === 0);
+  let cleanPrefix = "*";
 
-  // Validate prefix format: must be "*" or end with "/"
-  const cleanPrefix = prefix.trim();
-  if (cleanPrefix !== "*" && !cleanPrefix.endsWith("/")) {
-    res.status(400).json({
-      error: 'prefix must be "*" or a folder path ending with "/" (e.g. "infopublica/")',
-    });
-    return;
+  if (prefix !== undefined) {
+    if (typeof prefix !== "string" || prefix.trim().length === 0) {
+      res.status(400).json({ error: 'prefix must be "*" or omitted when using folder_ids' });
+      return;
+    }
+    cleanPrefix = prefix.trim();
+    if (cleanPrefix !== "*" && !cleanPrefix.endsWith("/")) {
+      res.status(400).json({
+        error: 'prefix must be "*" or a folder path ending with "/" (e.g. "infopublica/")',
+      });
+      return;
+    }
+  } else if (!isGlobal) {
+    cleanPrefix = "folder-based";
   }
 
   if (typeof can_upload !== "boolean") {
@@ -95,6 +101,11 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
     }
   }
 
+  if (folder_ids !== undefined && !Array.isArray(folder_ids)) {
+    res.status(400).json({ error: "folder_ids must be an array of UUIDs" });
+    return;
+  }
+
   try {
     const { record, rawKey } = await createApiKey({
       name: name.trim(),
@@ -102,6 +113,7 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
       can_upload,
       can_download,
       expires_at: expires_at ?? null,
+      folder_ids: folder_ids ?? [],
     });
 
     res.status(201).json({
@@ -172,6 +184,7 @@ router.post("/keys/:id/renew", async (req: Request, res: Response): Promise<void
       can_upload: existing.can_upload,
       can_download: existing.can_download,
       expires_at: existing.expires_at,
+      folder_ids: existing.folders.map(f => f.id),
     });
 
     await revokeApiKey(id);

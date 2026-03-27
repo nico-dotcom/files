@@ -89,7 +89,82 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS file_events_created_at_idx ON public.file_events (created_at DESC);
   CREATE INDEX IF NOT EXISTS file_events_api_key_id_idx ON public.file_events (api_key_id);
+
+  CREATE TABLE IF NOT EXISTS public.folders (
+    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       text        NOT NULL UNIQUE,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  CREATE TABLE IF NOT EXISTS public.api_key_folders (
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    api_key_id uuid NOT NULL REFERENCES public.api_keys(id) ON DELETE CASCADE,
+    folder_id  uuid NOT NULL REFERENCES public.folders(id) ON DELETE CASCADE,
+    UNIQUE (api_key_id, folder_id)
+  );
 `;
+
+/** Create a many-to-one (object) relationship using a FK column */
+async function createObjectRelationship(
+  table: string,
+  name: string,
+  fkColumn: string
+): Promise<void> {
+  const res = await fetch(`${HASURA_BASE}/v1/metadata`, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify({
+      type: "pg_create_object_relationship",
+      args: {
+        source: "default",
+        table: { schema: "public", name: table },
+        name,
+        using: { foreign_key_constraint_on: fkColumn },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json() as { error?: string };
+    const msg = (body.error ?? "").toLowerCase();
+    if (!msg.includes("already exists") && !msg.includes("already defined")) {
+      throw new Error(`Hasura object relationship "${table}.${name}" failed: ${body.error}`);
+    }
+  }
+}
+
+/** Create a one-to-many (array) relationship pointing at a remote table's FK column */
+async function createArrayRelationship(
+  table: string,
+  name: string,
+  remoteTable: string,
+  remoteColumn: string
+): Promise<void> {
+  const res = await fetch(`${HASURA_BASE}/v1/metadata`, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify({
+      type: "pg_create_array_relationship",
+      args: {
+        source: "default",
+        table: { schema: "public", name: table },
+        name,
+        using: {
+          foreign_key_constraint_on: {
+            table: { schema: "public", name: remoteTable },
+            column: remoteColumn,
+          },
+        },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json() as { error?: string };
+    const msg = (body.error ?? "").toLowerCase();
+    if (!msg.includes("already exists") && !msg.includes("already defined")) {
+      throw new Error(`Hasura array relationship "${table}.${name}" failed: ${body.error}`);
+    }
+  }
+}
 
 // ─── Main entry point ──────────────────────────────────────────────────────────
 
@@ -104,4 +179,15 @@ export async function ensureSchema(): Promise<void> {
 
   await trackTable("public", "file_events");
   console.log(`  ✓ Table "public.file_events" is tracked in Hasura`);
+
+  await trackTable("public", "folders");
+  await trackTable("public", "api_key_folders");
+  console.log(`  ✓ Tables "public.folders" and "public.api_key_folders" are tracked in Hasura`);
+
+  // Relationships so we can query nested folders from api_keys
+  await createObjectRelationship("api_key_folders", "folder", "folder_id");
+  await createObjectRelationship("api_key_folders", "api_key", "api_key_id");
+  await createArrayRelationship("api_keys", "api_key_folders", "api_key_folders", "api_key_id");
+  await createArrayRelationship("folders", "api_key_folders", "api_key_folders", "folder_id");
+  console.log(`  ✓ Hasura relationships configured`);
 }

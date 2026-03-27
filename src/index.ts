@@ -10,6 +10,7 @@ import createUploadRouter from "./routes/createUpload";
 import confirmUploadRouter from "./routes/confirmUpload";
 import createDownloadUrlRouter from "./routes/createDownloadUrl";
 import adminKeysRouter from "./routes/admin/keys";
+import adminFoldersRouter from "./routes/admin/folders";
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use(
 // ─── Admin routes (master key required — enforced inside the router) ──────────
 
 app.use("/admin", adminLimiter, adminKeysRouter);
+app.use("/admin", adminLimiter, adminFoldersRouter);
 
 // ─── API routes (scoped API key required) ─────────────────────────────────────
 
