@@ -21,9 +21,12 @@ async function login() {
     document.getElementById('app').style.display = 'block';
     renderKeys(res.data.keys);
     loadFolders();
-    // Wire global checkbox after app is shown
-    document.getElementById('f-global').addEventListener('change', function() {
-      document.getElementById('folder-select-wrapper').style.display = this.checked ? 'none' : 'block';
+    // Wire scope radio buttons after app is shown
+    document.querySelectorAll('input[name="scope"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        document.getElementById('folder-select-wrapper').style.display =
+          this.value === 'specific' ? 'block' : 'none';
+      });
     });
   } else {
     toast('Master key inválida', 'err');
@@ -57,7 +60,8 @@ async function loadFolders() {
     renderFolders(CACHED_FOLDERS);
     renderFolderCheckboxes(CACHED_FOLDERS);
   } else {
-    toast('Error al cargar carpetas', 'err');
+    document.getElementById('folders-body').innerHTML =
+      '<tr><td colspan="3" class="empty">Error al cargar carpetas: ' + (res.data?.error || res.status) + '</td></tr>';
   }
 }
 
@@ -262,7 +266,7 @@ async function createKey() {
   const name    = document.getElementById('f-name').value.trim();
   const expires = document.getElementById('f-expires').value;
   const ops     = document.getElementById('f-ops').value;
-  const isGlobal = document.getElementById('f-global').checked;
+  const isGlobal = document.getElementById('f-global').checked; // radio "global"
 
   if (!name) { toast('Ingresá un nombre', 'err'); return; }
 
@@ -294,7 +298,6 @@ async function createKey() {
     document.getElementById('f-expires').value = '';
     document.getElementById('f-global').checked = true;
     document.getElementById('folder-select-wrapper').style.display = 'none';
-    // Uncheck all folder checkboxes
     document.querySelectorAll('#folder-checkboxes input[type=checkbox]').forEach(cb => { cb.checked = false; });
     loadKeys();
   } else {
