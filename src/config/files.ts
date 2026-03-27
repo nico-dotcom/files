@@ -78,10 +78,14 @@ export async function softDeleteFile(id: string): Promise<boolean> {
 
   const objectKey = data.update_files.returning[0]?.object_key;
   if (objectKey) {
-    // Remove from MinIO — fire-and-forget; don't block the response on storage errors
-    minioClient.removeObject(env.S3_BUCKET, objectKey).catch(err => {
-      console.error(`[files] MinIO removeObject failed for "${objectKey}":`, err);
-    });
+    console.log(`[files] Deleting from MinIO: bucket="${env.S3_BUCKET}" key="${objectKey}"`);
+    try {
+      await minioClient.removeObject(env.S3_BUCKET, objectKey);
+      console.log(`[files] MinIO removeObject OK: "${objectKey}"`);
+    } catch (err) {
+      console.error(`[files] MinIO removeObject FAILED for "${objectKey}":`, err);
+      // Don't throw — DB record is already marked deleted; log is enough for now
+    }
   }
 
   return true;
