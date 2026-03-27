@@ -12,18 +12,4 @@ document.getElementById('btn-close-modal').addEventListener('click', closeModal)
 document.getElementById('btn-cancel-edit').addEventListener('click', closeEditModal);
 document.getElementById('btn-save-edit').addEventListener('click', saveEdit);
 
-// Scope radios — create form (wired here so they work before first login)
-document.querySelectorAll('input[name="scope"]').forEach(radio => {
-  radio.addEventListener('change', function () {
-    document.getElementById('folder-select-wrapper').style.display =
-      this.value === 'specific' ? 'block' : 'none';
-  });
-});
-
-// Scope radios — edit modal
-document.querySelectorAll('input[name="edit-scope"]').forEach(radio => {
-  radio.addEventListener('change', function () {
-    document.getElementById('edit-folder-wrapper').style.display =
-      this.value === 'specific' ? 'block' : 'none';
-  });
-});
+// Folder visibility is handled by CSS :has() — no JS needed.
