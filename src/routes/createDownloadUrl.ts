@@ -4,6 +4,7 @@ import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
 import { validateFileId } from "../middleware/validate";
 import { checkScope } from "../middleware/apiKey";
+import { logFileEvent } from "../config/fileEvents";
 
 const router = Router();
 
@@ -98,6 +99,14 @@ router.post(
       res.status(500).json({ error: "Failed to generate download URL" });
       return;
     }
+
+    logFileEvent({
+      event_type: "download_url_created",
+      file_id: fileRecord.id,
+      api_key_id: req.apiKey?.id,
+      object_key: fileRecord.object_key,
+      mime_type: fileRecord.mime_type,
+    });
 
     res.status(200).json({
       downloadUrl,

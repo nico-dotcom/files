@@ -8,15 +8,15 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:       #0f1117;
-      --surface:  #1a1d27;
-      --border:   #2a2d3e;
+      --bg:       #f8f9fc;
+      --surface:  #ffffff;
+      --border:   #e2e8f0;
       --primary:  #6c63ff;
-      --primary-h:#8b84ff;
-      --danger:   #ff4d4d;
-      --success:  #22c55e;
-      --text:     #e2e8f0;
-      --muted:    #94a3b8;
+      --primary-h:#5a52d5;
+      --danger:   #e53e3e;
+      --success:  #38a169;
+      --text:     #1a202c;
+      --muted:    #718096;
       --mono:     'Fira Mono', 'Consolas', monospace;
     }
 
@@ -113,7 +113,7 @@
     th { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); }
     td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(108,99,255,.04); }
+    tr:hover td { background: rgba(108,99,255,.06); }
 
     .badge {
       display: inline-block;
@@ -122,10 +122,10 @@
       font-size: 11px;
       font-weight: 500;
     }
-    .badge-green  { background: rgba(34,197,94,.15); color: #4ade80; }
-    .badge-red    { background: rgba(255,77,77,.15);  color: #f87171; }
-    .badge-purple { background: rgba(108,99,255,.15); color: var(--primary-h); }
-    .badge-blue   { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .badge-green  { background: rgba(34,197,94,.12);  color: #16a34a; }
+    .badge-red    { background: rgba(220,38,38,.12);  color: #dc2626; }
+    .badge-purple { background: rgba(108,99,255,.12); color: var(--primary-h); }
+    .badge-blue   { background: rgba(59,130,246,.12); color: #2563eb; }
 
     code {
       font-family: var(--mono);
@@ -137,10 +137,12 @@
     }
 
     /* New key modal */
+    .btn-renew { background: var(--primary); color: #fff; padding: 4px 10px; font-size: 12px; margin-right: 4px; }
+
     .modal-overlay {
       display: none;
       position: fixed; inset: 0;
-      background: rgba(0,0,0,.7);
+      background: rgba(0,0,0,.4);
       align-items: center;
       justify-content: center;
       z-index: 100;
@@ -190,6 +192,18 @@
     .empty { text-align: center; padding: 32px; color: var(--muted); }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .folder-form-row { display: flex; gap: 10px; margin-bottom: 12px; }
+    .folder-form-row input { flex: 1; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
+    .folder-form-row input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+    .folder-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 44px; }
+    .folder-checkbox-item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+    .folder-checkbox-item input[type=checkbox] { cursor: pointer; accent-color: var(--primary); }
+    .folder-checkbox-item:has(input:checked) { border-color: var(--primary); background: rgba(108,99,255,.06); }
+
+    .global-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
+    .global-row input[type=checkbox] { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -213,24 +227,35 @@
 <!-- ── Main content ─────────────────────────────────────────────────────────── -->
 <main id="app" style="display:none">
 
-  <!-- Create form -->
+  <!-- Folders section -->
+  <section>
+    <h2>Carpetas</h2>
+    <div class="folder-form-row">
+      <input id="f-folder-name" type="text" placeholder="facturas, imagenes/perfil, documentos/2024…" />
+      <button class="btn-primary" id="btn-create-folder">Crear carpeta</button>
+    </div>
+    <table id="folders-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Creada</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="folders-body">
+        <tr><td colspan="3" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Create key form -->
   <section>
     <h2>Nueva API Key</h2>
     <div class="form-grid">
 
       <label>
         Nombre / descripción
-        <input id="f-name" type="text" placeholder="Frontend – infopublica" />
-      </label>
-
-      <label>
-        Prefijo de carpeta (scope)
-        <input id="f-prefix" type="text" placeholder="infopublica/ o *" value="*" />
-      </label>
-
-      <label>
-        Expira el (opcional)
-        <input id="f-expires" type="datetime-local" />
+        <input id="f-name" type="text" placeholder="Frontend – facturas" />
       </label>
 
       <label>
@@ -241,6 +266,25 @@
           <option value="download">Solo descargar</option>
         </select>
       </label>
+
+      <label>
+        Expira el (opcional)
+        <input id="f-expires" type="datetime-local" />
+      </label>
+
+      <div style="display:flex; align-items:center; padding-top:18px;">
+        <label class="global-row">
+          <input type="checkbox" id="f-global" checked />
+          Acceso global (todas las carpetas)
+        </label>
+      </div>
+
+      <div id="folder-select-wrapper" style="display:none; grid-column:1/-1;">
+        <div style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Carpetas con acceso</div>
+        <div class="folder-checkboxes" id="folder-checkboxes">
+          <span style="color:var(--muted); font-size:13px;">No hay carpetas creadas todavía.</span>
+        </div>
+      </div>
 
       <div class="btn-submit">
         <button class="btn-primary" id="btn-create-key">Generar key</button>
@@ -255,7 +299,7 @@
       <thead>
         <tr>
           <th>Nombre</th>
-          <th>Prefijo</th>
+          <th>Carpetas</th>
           <th>Operaciones</th>
           <th>Último uso</th>
           <th>Expira</th>
@@ -274,8 +318,8 @@
 <!-- ── New key modal ─────────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
-    <h3>✓ Key creada exitosamente</h3>
-    <p>Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.</p>
+    <h3 id="modal-title">✓ Key creada exitosamente</h3>
+    <p id="modal-desc">Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.</p>
     <div class="key-box" id="modal-key"></div>
     <div class="modal-actions">
       <button class="btn-ghost" id="btn-copy-key">Copiar</button>

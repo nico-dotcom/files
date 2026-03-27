@@ -3,7 +3,7 @@
  * All routes require the MASTER_API_KEY (Authorization: Bearer <MASTER_API_KEY>).
  */
 import { Router, Request, Response } from "express";
-import { createApiKey, revokeApiKey, listApiKeys } from "../../config/apiKeys";
+import { createApiKey, revokeApiKey, listApiKeys, getApiKeyById } from "../../config/apiKeys";
 import { isValidUuid } from "../../middleware/validate";
 import { safeEqual } from "../../utils/crypto";
 
@@ -56,25 +56,31 @@ router.get("/keys", async (req: Request, res: Response): Promise<void> => {
 router.post("/keys", async (req: Request, res: Response): Promise<void> => {
   if (!requireMaster(req, res)) return;
 
-  const { name, prefix, can_upload, can_download, expires_at } = req.body;
+  const { name, prefix, can_upload, can_download, expires_at, folder_ids } = req.body;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     res.status(400).json({ error: "name is required" });
     return;
   }
 
-  if (typeof prefix !== "string" || prefix.trim().length === 0) {
-    res.status(400).json({ error: "prefix is required (use \"*\" for full access)" });
-    return;
-  }
+  // prefix is optional — if not provided and folder_ids provided, key is folder-based
+  const isGlobal = !folder_ids || (Array.isArray(folder_ids) && folder_ids.length === 0);
+  let cleanPrefix = "*";
 
-  // Validate prefix format: must be "*" or end with "/"
-  const cleanPrefix = prefix.trim();
-  if (cleanPrefix !== "*" && !cleanPrefix.endsWith("/")) {
-    res.status(400).json({
-      error: 'prefix must be "*" or a folder path ending with "/" (e.g. "infopublica/")',
-    });
-    return;
+  if (prefix !== undefined) {
+    if (typeof prefix !== "string" || prefix.trim().length === 0) {
+      res.status(400).json({ error: 'prefix must be "*" or omitted when using folder_ids' });
+      return;
+    }
+    cleanPrefix = prefix.trim();
+    if (cleanPrefix !== "*" && !cleanPrefix.endsWith("/")) {
+      res.status(400).json({
+        error: 'prefix must be "*" or a folder path ending with "/" (e.g. "infopublica/")',
+      });
+      return;
+    }
+  } else if (!isGlobal) {
+    cleanPrefix = "folder-based";
   }
 
   if (typeof can_upload !== "boolean") {
@@ -95,6 +101,11 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
     }
   }
 
+  if (folder_ids !== undefined && !Array.isArray(folder_ids)) {
+    res.status(400).json({ error: "folder_ids must be an array of UUIDs" });
+    return;
+  }
+
   try {
     const { record, rawKey } = await createApiKey({
       name: name.trim(),
@@ -102,6 +113,7 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
       can_upload,
       can_download,
       expires_at: expires_at ?? null,
+      folder_ids: folder_ids ?? [],
     });
 
     res.status(201).json({
@@ -142,6 +154,55 @@ router.delete("/keys/:id", async (req: Request, res: Response): Promise<void> =>
   } catch (err) {
     console.error("[admin/keys] revoke error:", err);
     res.status(500).json({ error: "Failed to revoke key" });
+  }
+});
+
+// ─── POST /admin/keys/:id/renew ───────────────────────────────────────────────
+/**
+ * Revokes the existing key and creates a new one with the same configuration.
+ * Returns the new raw key (shown once).
+ */
+router.post("/keys/:id/renew", async (req: Request, res: Response): Promise<void> => {
+  if (!requireMaster(req, res)) return;
+
+  const { id } = req.params;
+  if (!isValidUuid(id)) {
+    res.status(400).json({ error: "id must be a valid UUID" });
+    return;
+  }
+
+  try {
+    const existing = await getApiKeyById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Key not found" });
+      return;
+    }
+
+    const { record, rawKey } = await createApiKey({
+      name: existing.name,
+      prefix: existing.prefix,
+      can_upload: existing.can_upload,
+      can_download: existing.can_download,
+      expires_at: existing.expires_at,
+      folder_ids: existing.folders.map(f => f.id),
+    });
+
+    await revokeApiKey(id);
+
+    res.status(201).json({
+      message: "Key renewed. The new raw key is shown only once — save it now.",
+      key: rawKey,
+      id: record.id,
+      name: record.name,
+      prefix: record.prefix,
+      can_upload: record.can_upload,
+      can_download: record.can_download,
+      expires_at: record.expires_at,
+      created_at: record.created_at,
+    });
+  } catch (err) {
+    console.error("[admin/keys] renew error:", err);
+    res.status(500).json({ error: "Failed to renew key" });
   }
 });
 
