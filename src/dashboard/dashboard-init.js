@@ -7,3 +7,4 @@ document.getElementById('btn-create-folder').addEventListener('click', createFol
 document.getElementById('btn-create-key').addEventListener('click', createKey);
 document.getElementById('btn-copy-key').addEventListener('click', copyKey);
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+document.getElementById('btn-refresh-files').addEventListener('click', loadFiles);

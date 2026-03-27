@@ -56,7 +56,7 @@ router.get("/keys", async (req: Request, res: Response): Promise<void> => {
 router.post("/keys", async (req: Request, res: Response): Promise<void> => {
   if (!requireMaster(req, res)) return;
 
-  const { name, prefix, can_upload, can_download, expires_at, folder_ids } = req.body;
+  const { name, prefix, can_upload, can_download, can_delete, expires_at, folder_ids } = req.body;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     res.status(400).json({ error: "name is required" });
@@ -93,6 +93,11 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  if (can_delete !== undefined && typeof can_delete !== "boolean") {
+    res.status(400).json({ error: "can_delete must be a boolean" });
+    return;
+  }
+
   if (expires_at !== undefined && expires_at !== null) {
     const expiryDate = new Date(expires_at);
     if (isNaN(expiryDate.getTime()) || expiryDate <= new Date()) {
@@ -112,6 +117,7 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
       prefix: cleanPrefix,
       can_upload,
       can_download,
+      can_delete: can_delete ?? false,
       expires_at: expires_at ?? null,
       folder_ids: folder_ids ?? [],
     });
@@ -183,6 +189,7 @@ router.post("/keys/:id/renew", async (req: Request, res: Response): Promise<void
       prefix: existing.prefix,
       can_upload: existing.can_upload,
       can_download: existing.can_download,
+      can_delete: existing.can_delete,
       expires_at: existing.expires_at,
       folder_ids: existing.folders.map(f => f.id),
     });

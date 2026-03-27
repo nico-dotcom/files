@@ -68,11 +68,14 @@ const SCHEMA_SQL = `
     prefix       text        NOT NULL DEFAULT '*',
     can_upload   boolean     NOT NULL DEFAULT true,
     can_download boolean     NOT NULL DEFAULT true,
+    can_delete   boolean     NOT NULL DEFAULT false,
     is_active    boolean     NOT NULL DEFAULT true,
     expires_at   timestamptz,
     created_at   timestamptz NOT NULL DEFAULT now(),
     last_used_at timestamptz
   );
+
+  ALTER TABLE public.api_keys ADD COLUMN IF NOT EXISTS can_delete boolean NOT NULL DEFAULT false;
 
   CREATE INDEX IF NOT EXISTS api_keys_is_active_idx ON public.api_keys (is_active);
 
@@ -102,6 +105,25 @@ const SCHEMA_SQL = `
     folder_id  uuid NOT NULL REFERENCES public.folders(id) ON DELETE CASCADE,
     UNIQUE (api_key_id, folder_id)
   );
+
+  CREATE TABLE IF NOT EXISTS public.files (
+    id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    bucket            text        NOT NULL,
+    object_key        text        NOT NULL UNIQUE,
+    original_filename text        NOT NULL,
+    mime_type         text        NOT NULL,
+    size_bytes        bigint      NOT NULL,
+    owner_user_id     uuid        NOT NULL,
+    status            text        NOT NULL DEFAULT 'pending',
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    deleted_at        timestamptz
+  );
+
+  ALTER TABLE public.files ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+  CREATE INDEX IF NOT EXISTS files_owner_user_id_idx ON public.files (owner_user_id);
+  CREATE INDEX IF NOT EXISTS files_status_idx ON public.files (status);
+  CREATE INDEX IF NOT EXISTS files_deleted_at_idx ON public.files (deleted_at) WHERE deleted_at IS NULL;
 `;
 
 /** Create a many-to-one (object) relationship using a FK column */
@@ -183,6 +205,9 @@ export async function ensureSchema(): Promise<void> {
   await trackTable("public", "folders");
   await trackTable("public", "api_key_folders");
   console.log(`  ✓ Tables "public.folders" and "public.api_key_folders" are tracked in Hasura`);
+
+  await trackTable("public", "files");
+  console.log(`  ✓ Table "public.files" is tracked in Hasura`);
 
   // Relationships so we can query nested folders from api_keys
   await createObjectRelationship("api_key_folders", "folder", "folder_id");
