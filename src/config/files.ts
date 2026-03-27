@@ -84,7 +84,20 @@ export async function softDeleteFile(id: string): Promise<boolean> {
       console.log(`[files] MinIO removeObject OK: "${objectKey}"`);
     } catch (err) {
       console.error(`[files] MinIO removeObject FAILED for "${objectKey}":`, err);
-      // Don't throw — DB record is already marked deleted; log is enough for now
+    }
+
+    // Verify the file is actually gone
+    try {
+      await minioClient.statObject(env.S3_BUCKET, objectKey);
+      // statObject succeeded → file still exists in MinIO despite removeObject
+      console.error(`[files] WARNING: file still exists in MinIO after removeObject! key="${objectKey}" — bucket versioning may be enabled.`);
+    } catch (statErr: any) {
+      const code = statErr?.code ?? statErr?.message ?? String(statErr);
+      if (code === "NotFound" || String(code).includes("Not Found") || String(code).includes("NoSuchKey")) {
+        console.log(`[files] Verified: file no longer exists in MinIO.`);
+      } else {
+        console.error(`[files] Could not verify deletion (statObject error):`, statErr);
+      }
     }
   }
 
