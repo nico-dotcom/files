@@ -19,7 +19,9 @@ async function login() {
     MASTER_KEY = val;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
+    console.log('[login] calling renderKeys...');
     renderKeys(res.data.keys);
+    console.log('[login] renderKeys done, calling loadFolders...');
     loadFolders();
     // Wire scope radio buttons after app is shown
     document.querySelectorAll('input[name="scope"]').forEach(radio => {
@@ -54,7 +56,9 @@ async function apiFetch(path, method, body, key) {
 
 // ── Folders ──────────────────────────────────────────────────────────────────
 async function loadFolders() {
+  console.log('[folders] loadFolders() called');
   const res = await apiFetch('/admin/folders', 'GET');
+  console.log('[folders] response:', res.ok, res.status, JSON.stringify(res.data));
   if (res.ok) {
     CACHED_FOLDERS = res.data.folders || [];
     renderFolders(CACHED_FOLDERS);
