@@ -205,6 +205,72 @@ export async function revokeApiKey(id: string): Promise<boolean> {
   return data.update_api_keys_by_pk !== null;
 }
 
+/** Hard-delete a key permanently */
+export async function deleteApiKey(id: string): Promise<boolean> {
+  const data = await hasuraQuery<{
+    delete_api_keys_by_pk: { id: string } | null;
+  }>(
+    `mutation DeleteApiKey($id: uuid!) {
+      delete_api_keys_by_pk(id: $id) { id }
+    }`,
+    { id }
+  );
+  return data.delete_api_keys_by_pk !== null;
+}
+
+/** Update mutable fields on an existing key and replace its folder assignments */
+export async function updateApiKey(
+  id: string,
+  params: {
+    can_upload: boolean;
+    can_download: boolean;
+    can_delete: boolean;
+    expires_at: string | null;
+    folder_ids: string[];
+  }
+): Promise<ApiKeyRecord | null> {
+  // 1. Update scalar fields
+  const data = await hasuraQuery<{
+    update_api_keys_by_pk: (ApiKeyRecord & { api_key_folders: { folder: FolderRecord }[] }) | null;
+  }>(
+    `mutation UpdateApiKey($id: uuid!, $set: api_keys_set_input!) {
+      update_api_keys_by_pk(pk_columns: { id: $id }, _set: $set) { ${API_KEY_FIELDS} }
+    }`,
+    {
+      id,
+      set: {
+        can_upload: params.can_upload,
+        can_download: params.can_download,
+        can_delete: params.can_delete,
+        expires_at: params.expires_at,
+      },
+    }
+  );
+
+  if (!data.update_api_keys_by_pk) return null;
+
+  // 2. Replace folder assignments: delete old, insert new
+  await hasuraQuery(
+    `mutation DeleteKeyFolders($key_id: uuid!) {
+      delete_api_key_folders(where: { api_key_id: { _eq: $key_id } }) { affected_rows }
+    }`,
+    { key_id: id }
+  );
+
+  if (params.folder_ids.length > 0) {
+    const objects = params.folder_ids.map(folder_id => ({ api_key_id: id, folder_id }));
+    await hasuraQuery(
+      `mutation InsertApiKeyFolders($objects: [api_key_folders_insert_input!]!) {
+        insert_api_key_folders(objects: $objects) { affected_rows }
+      }`,
+      { objects }
+    );
+  }
+
+  const raw = data.update_api_keys_by_pk;
+  return { ...raw, folders: mapFolders(raw) };
+}
+
 /** List all keys (never returns key_hash) */
 export async function listApiKeys(): Promise<ApiKeyRecord[]> {
   const data = await hasuraQuery<{ api_keys: Array<ApiKeyRecord & { api_key_folders: { folder: FolderRecord }[] }> }>(

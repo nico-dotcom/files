@@ -39,7 +39,7 @@
     header h1 { font-size: 18px; font-weight: 600; }
     header span { color: var(--muted); font-size: 12px; }
 
-    main { max-width: 960px; margin: 32px auto; padding: 0 24px; }
+    main { max-width: 1000px; margin: 32px auto; padding: 0 24px; }
 
     /* Auth screen */
     #auth-screen {
@@ -68,17 +68,19 @@
     section h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
 
     /* Create form */
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+    .form-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
-    .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-    .form-grid input, .form-grid select {
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-field { display: flex; flex-direction: column; gap: 6px; }
+    .form-field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .form-field input, .form-field select {
       padding: 8px 12px;
       background: var(--bg);
       border: 1px solid var(--border);
@@ -86,9 +88,43 @@
       color: var(--text);
       font-size: 13px;
     }
-    .form-grid input:focus, .form-grid select:focus { outline: 2px solid var(--primary); border-color: transparent; }
-    .form-row-full { grid-column: 1 / -1; display: flex; gap: 12px; }
-    .form-row-full label { flex: 1; }
+    .form-field input:focus, .form-field select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+    .ops-row { display: flex; align-items: flex-end; gap: 12px; }
+    .ops-row .form-field { flex: 1; }
+    .can-delete-label {
+      display: flex; align-items: center; gap: 7px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      font-size: 13px;
+      color: var(--text);
+      cursor: pointer;
+      white-space: nowrap;
+      height: 35px;
+      margin-bottom: 0;
+    }
+    .can-delete-label input[type=checkbox] { accent-color: var(--danger); width: 14px; height: 14px; }
+
+    /* Scope selector */
+    .scope-radios { display: flex; gap: 10px; }
+    .scope-radios label {
+      display: flex; align-items: center; gap: 7px;
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .scope-radios label:has(input:checked) { border-color: var(--primary); background: rgba(108,99,255,.06); }
+    .scope-radios input[type=radio] { accent-color: var(--primary); }
+
+    .folder-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 44px; margin-top: 8px; }
+    .folder-checkbox-item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+    .folder-checkbox-item input[type=checkbox] { cursor: pointer; accent-color: var(--primary); }
+    .folder-checkbox-item:has(input:checked) { border-color: var(--primary); background: rgba(108,99,255,.06); }
 
     /* Buttons */
     button {
@@ -105,7 +141,9 @@
     .btn-primary { background: var(--primary); color: #fff; }
     .btn-danger  { background: var(--danger);  color: #fff; padding: 4px 10px; font-size: 12px; }
     .btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--text); }
-    .btn-submit  { grid-column: 1/-1; justify-self: start; }
+    .btn-renew   { background: var(--primary); color: #fff; padding: 4px 10px; font-size: 12px; margin-right: 4px; }
+    .btn-edit    { background: #718096; color: #fff; padding: 4px 10px; font-size: 12px; margin-right: 4px; }
+    .btn-hard-del { background: #742a2a; color: #fff; padding: 4px 10px; font-size: 12px; margin-right: 4px; }
 
     /* Table */
     table { width: 100%; border-collapse: collapse; }
@@ -136,9 +174,7 @@
       font-size: 12px;
     }
 
-    /* New key modal */
-    .btn-renew { background: var(--primary); color: #fff; padding: 4px 10px; font-size: 12px; margin-right: 4px; }
-
+    /* Modals */
     .modal-overlay {
       display: none;
       position: fixed; inset: 0;
@@ -171,6 +207,13 @@
     }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
+    /* Edit modal */
+    #edit-modal .modal h3 { color: var(--text); }
+    .edit-form { display: flex; flex-direction: column; gap: 14px; }
+    .edit-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .edit-form .form-field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing:.05em; display:block; margin-bottom:5px; }
+    .edit-form .form-field select, .edit-form .form-field input { width:100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
+
     /* Toast */
     #toast {
       position: fixed;
@@ -196,17 +239,6 @@
     .folder-form-row { display: flex; gap: 10px; margin-bottom: 12px; }
     .folder-form-row input { flex: 1; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
     .folder-form-row input:focus { outline: 2px solid var(--primary); border-color: transparent; }
-
-    .folder-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 44px; }
-    .folder-checkbox-item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
-    .folder-checkbox-item input[type=checkbox] { cursor: pointer; accent-color: var(--primary); }
-    .folder-checkbox-item:has(input:checked) { border-color: var(--primary); background: rgba(108,99,255,.06); }
-
-    .global-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
-    .global-row input[type=checkbox] { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
-
-    .delete-perm-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
-    .delete-perm-row input[type=checkbox] { accent-color: var(--danger); width: 15px; height: 15px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -254,35 +286,46 @@
   <!-- Create key form -->
   <section>
     <h2>Nueva API Key</h2>
-    <div class="form-grid">
+    <div class="form-card">
 
-      <label>
-        Nombre / descripción
-        <input id="f-name" type="text" placeholder="Frontend – facturas" />
-      </label>
+      <div class="form-row">
+        <div class="form-field">
+          <label>Nombre / descripción</label>
+          <input id="f-name" type="text" placeholder="Frontend – facturas" />
+        </div>
+        <div class="form-field">
+          <label>Expira el (opcional)</label>
+          <input id="f-expires" type="datetime-local" />
+        </div>
+      </div>
 
-      <label>
-        Operaciones
-        <select id="f-ops">
-          <option value="both">Subir y descargar</option>
-          <option value="upload">Solo subir</option>
-          <option value="download">Solo descargar</option>
-        </select>
-      </label>
+      <!-- Operations + can_delete on the same row -->
+      <div class="form-field">
+        <label>Operaciones</label>
+        <div class="ops-row">
+          <div class="form-field" style="margin:0;">
+            <select id="f-ops">
+              <option value="both">Subir y descargar</option>
+              <option value="upload">Solo subir</option>
+              <option value="download">Solo descargar</option>
+            </select>
+          </div>
+          <label class="can-delete-label">
+            <input type="checkbox" id="f-can-delete" />
+            Permitir eliminar archivos
+          </label>
+        </div>
+      </div>
 
-      <label>
-        Expira el (opcional)
-        <input id="f-expires" type="datetime-local" />
-      </label>
-
-      <div style="grid-column:1/-1;">
-        <div style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px;">Acceso a carpetas</div>
-        <div style="display:flex; gap:10px; margin-bottom:10px;">
-          <label class="global-row" style="padding:8px 14px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">
+      <!-- Folder scope -->
+      <div class="form-field">
+        <label>Acceso a carpetas</label>
+        <div class="scope-radios">
+          <label>
             <input type="radio" name="scope" id="f-global" value="global" checked />
             Global (todas las carpetas)
           </label>
-          <label class="global-row" style="padding:8px 14px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">
+          <label>
             <input type="radio" name="scope" id="f-specific" value="specific" />
             Carpetas específicas
           </label>
@@ -294,30 +337,22 @@
         </div>
       </div>
 
-      <div style="grid-column:1/-1;">
-        <div style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px;">Permiso de eliminación</div>
-        <label class="delete-perm-row" style="display:inline-flex;">
-          <input type="checkbox" id="f-can-delete" />
-          Permitir eliminar archivos (can_delete)
-        </label>
-      </div>
-
-      <div class="btn-submit">
+      <div>
         <button class="btn-primary" id="btn-create-key">Generar key</button>
       </div>
+
     </div>
   </section>
 
   <!-- Keys table -->
   <section>
-    <h2>Keys activas</h2>
+    <h2>API Keys</h2>
     <table id="keys-table">
       <thead>
         <tr>
           <th>Nombre</th>
           <th>Carpetas</th>
           <th>Operaciones</th>
-          <th>Eliminar</th>
           <th>Último uso</th>
           <th>Expira</th>
           <th>Estado</th>
@@ -325,37 +360,14 @@
         </tr>
       </thead>
       <tbody id="keys-body">
-        <tr><td colspan="8" class="empty"><span class="spinner"></span> Cargando...</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <!-- Files section -->
-  <section>
-    <h2 style="display:flex;align-items:center;gap:12px;">
-      Archivos
-      <button class="btn-ghost" id="btn-refresh-files" style="font-size:12px;padding:4px 10px;">↻ Actualizar</button>
-    </h2>
-    <table id="files-table">
-      <thead>
-        <tr>
-          <th>Nombre</th>
-          <th>Ruta (object key)</th>
-          <th>Tipo</th>
-          <th>Tamaño</th>
-          <th>Subido</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="files-body">
-        <tr><td colspan="6" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+        <tr><td colspan="7" class="empty"><span class="spinner"></span> Cargando...</td></tr>
       </tbody>
     </table>
   </section>
 
 </main>
 
-<!-- ── New key modal ─────────────────────────────────────────────────────────── -->
+<!-- ── New / renewed key modal ───────────────────────────────────────────────── -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
     <h3 id="modal-title">✓ Key creada exitosamente</h3>
@@ -364,6 +376,62 @@
     <div class="modal-actions">
       <button class="btn-ghost" id="btn-copy-key">Copiar</button>
       <button class="btn-primary" id="btn-close-modal">Listo, ya la copié</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit key modal ────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal" style="max-width:600px;">
+    <h3 style="color:var(--text);margin-bottom:16px;">Editar API Key — <span id="edit-modal-name" style="color:var(--muted);font-weight:400;"></span></h3>
+    <div class="edit-form">
+
+      <div class="form-row">
+        <div class="form-field">
+          <label>Operaciones</label>
+          <select id="edit-ops">
+            <option value="both">Subir y descargar</option>
+            <option value="upload">Solo subir</option>
+            <option value="download">Solo descargar</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Expira el (opcional)</label>
+          <input id="edit-expires" type="datetime-local" />
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label>Operaciones adicionales</label>
+        <label class="can-delete-label" style="width:fit-content;">
+          <input type="checkbox" id="edit-can-delete" />
+          Permitir eliminar archivos
+        </label>
+      </div>
+
+      <div class="form-field">
+        <label>Acceso a carpetas</label>
+        <div class="scope-radios">
+          <label>
+            <input type="radio" name="edit-scope" id="edit-global" value="global" checked />
+            Global (todas las carpetas)
+          </label>
+          <label>
+            <input type="radio" name="edit-scope" id="edit-specific" value="specific" />
+            Carpetas específicas
+          </label>
+        </div>
+        <div id="edit-folder-wrapper" style="display:none;">
+          <div class="folder-checkboxes" id="edit-folder-checkboxes">
+            <span style="color:var(--muted); font-size:13px;">No hay carpetas todavía.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn-ghost" id="btn-cancel-edit">Cancelar</button>
+      <button class="btn-primary" id="btn-save-edit">Guardar cambios</button>
     </div>
   </div>
 </div>

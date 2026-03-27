@@ -3,7 +3,7 @@
  * All routes require the MASTER_API_KEY (Authorization: Bearer <MASTER_API_KEY>).
  */
 import { Router, Request, Response } from "express";
-import { createApiKey, revokeApiKey, listApiKeys, getApiKeyById } from "../../config/apiKeys";
+import { createApiKey, revokeApiKey, deleteApiKey, updateApiKey, listApiKeys, getApiKeyById } from "../../config/apiKeys";
 import { isValidUuid } from "../../middleware/validate";
 import { safeEqual } from "../../utils/crypto";
 
@@ -139,6 +139,46 @@ router.post("/keys", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// ─── PUT /admin/keys/:id ──────────────────────────────────────────────────────
+
+router.put("/keys/:id", async (req: Request, res: Response): Promise<void> => {
+  if (!requireMaster(req, res)) return;
+
+  const { id } = req.params;
+  if (!isValidUuid(id)) {
+    res.status(400).json({ error: "id must be a valid UUID" });
+    return;
+  }
+
+  const { can_upload, can_download, can_delete, expires_at, folder_ids } = req.body;
+
+  if (typeof can_upload !== "boolean") { res.status(400).json({ error: "can_upload must be a boolean" }); return; }
+  if (typeof can_download !== "boolean") { res.status(400).json({ error: "can_download must be a boolean" }); return; }
+  if (typeof can_delete !== "boolean") { res.status(400).json({ error: "can_delete must be a boolean" }); return; }
+  if (!Array.isArray(folder_ids)) { res.status(400).json({ error: "folder_ids must be an array" }); return; }
+
+  if (expires_at !== undefined && expires_at !== null) {
+    const expiryDate = new Date(expires_at);
+    if (isNaN(expiryDate.getTime()) || expiryDate <= new Date()) {
+      res.status(400).json({ error: "expires_at must be a valid ISO date in the future" });
+      return;
+    }
+  }
+
+  try {
+    const updated = await updateApiKey(id, {
+      can_upload, can_download, can_delete,
+      expires_at: expires_at ?? null,
+      folder_ids,
+    });
+    if (!updated) { res.status(404).json({ error: "Key not found" }); return; }
+    res.json({ message: "Key updated", key: updated });
+  } catch (err) {
+    console.error("[admin/keys] update error:", err);
+    res.status(500).json({ error: "Failed to update key" });
+  }
+});
+
 // ─── DELETE /admin/keys/:id ───────────────────────────────────────────────────
 
 router.delete("/keys/:id", async (req: Request, res: Response): Promise<void> => {
@@ -150,16 +190,21 @@ router.delete("/keys/:id", async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
+  const hard = req.query.hard === "true";
+
   try {
-    const revoked = await revokeApiKey(id);
-    if (!revoked) {
-      res.status(404).json({ error: "Key not found" });
-      return;
+    if (hard) {
+      const deleted = await deleteApiKey(id);
+      if (!deleted) { res.status(404).json({ error: "Key not found" }); return; }
+      res.json({ message: "Key permanently deleted", id });
+    } else {
+      const revoked = await revokeApiKey(id);
+      if (!revoked) { res.status(404).json({ error: "Key not found" }); return; }
+      res.json({ message: "Key revoked", id });
     }
-    res.json({ message: "Key revoked", id });
   } catch (err) {
-    console.error("[admin/keys] revoke error:", err);
-    res.status(500).json({ error: "Failed to revoke key" });
+    console.error("[admin/keys] delete error:", err);
+    res.status(500).json({ error: "Failed to delete key" });
   }
 });
 
