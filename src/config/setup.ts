@@ -116,9 +116,11 @@ const SCHEMA_SQL = `
     owner_user_id     uuid        NOT NULL,
     status            text        NOT NULL DEFAULT 'pending',
     created_at        timestamptz NOT NULL DEFAULT now(),
+    uploaded_at       timestamptz,
     deleted_at        timestamptz
   );
 
+  ALTER TABLE public.files ADD COLUMN IF NOT EXISTS uploaded_at timestamptz;
   ALTER TABLE public.files ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 
   CREATE INDEX IF NOT EXISTS files_owner_user_id_idx ON public.files (owner_user_id);

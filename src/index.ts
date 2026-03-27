@@ -28,8 +28,9 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc:  ["'self'"],           // no unsafe-inline — scripts served as files
         styleSrc:   ["'self'", "'unsafe-inline'"],  // inline styles only (no external CSS)
-        connectSrc: ["'self'"],
-        imgSrc:     ["'self'", "data:"],
+        // Allow connecting to MinIO's public URL so the test page can PUT presigned uploads
+        connectSrc: ["'self'", env.S3_PUBLIC_URL],
+        imgSrc:     ["'self'", "data:", env.S3_PUBLIC_URL],
       },
     },
   })
@@ -69,6 +70,10 @@ app.get("/health", (_req, res) => {
 
 app.get("/dashboard", (_req, res) => {
   res.sendFile(path.join(__dirname, "dashboard", "index.html"));
+});
+
+app.get("/test", (_req, res) => {
+  res.sendFile(path.join(__dirname, "dashboard", "test.html"));
 });
 
 // Static files for the dashboard (JS files — served from /static/)
