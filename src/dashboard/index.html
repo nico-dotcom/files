@@ -272,17 +272,22 @@
         <input id="f-expires" type="datetime-local" />
       </label>
 
-      <div style="display:flex; align-items:center; padding-top:18px;">
-        <label class="global-row">
-          <input type="checkbox" id="f-global" checked />
-          Acceso global (todas las carpetas)
-        </label>
-      </div>
-
-      <div id="folder-select-wrapper" style="display:none; grid-column:1/-1;">
-        <div style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Carpetas con acceso</div>
-        <div class="folder-checkboxes" id="folder-checkboxes">
-          <span style="color:var(--muted); font-size:13px;">No hay carpetas creadas todavía.</span>
+      <div style="grid-column:1/-1;">
+        <div style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px;">Acceso a carpetas</div>
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+          <label class="global-row" style="padding:8px 14px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">
+            <input type="radio" name="scope" id="f-global" value="global" checked />
+            Global (todas las carpetas)
+          </label>
+          <label class="global-row" style="padding:8px 14px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">
+            <input type="radio" name="scope" id="f-specific" value="specific" />
+            Carpetas específicas
+          </label>
+        </div>
+        <div id="folder-select-wrapper" style="display:none;">
+          <div class="folder-checkboxes" id="folder-checkboxes">
+            <span style="color:var(--muted); font-size:13px;">No hay carpetas creadas todavía.</span>
+          </div>
         </div>
       </div>
 

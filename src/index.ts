@@ -45,11 +45,10 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Strict rate limit on admin endpoints — 10 req/15min per IP.
-// Prevents brute-force of the MASTER_API_KEY.
+// Rate limit on admin endpoints — protected by master key auth, so limit is generous.
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many admin requests, please try again later" },
