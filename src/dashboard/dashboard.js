@@ -226,15 +226,17 @@ async function createKey() {
     if (folder_ids.length === 0) { toast('Seleccioná al menos una carpeta, o marcá "Global"', 'err'); return; }
   }
 
-  const res = await apiFetch('/admin/keys', 'POST', {
+  const body = {
     name,
-    prefix:       isGlobal ? '*' : 'folder-based',
     can_upload:   ops !== 'download',
     can_download: ops !== 'upload',
     can_delete:   canDelete,
     expires_at:   expires ? new Date(expires).toISOString() : null,
     folder_ids,
-  });
+  };
+  if (isGlobal) body.prefix = '*';
+
+  const res = await apiFetch('/admin/keys', 'POST', body);
 
   if (res.ok) {
     openKeyModal(res.data.key, '✓ Key creada exitosamente', 'Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.');
