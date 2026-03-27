@@ -242,7 +242,6 @@ async function createKey() {
     document.getElementById('f-expires').value = '';
     document.getElementById('f-global').checked = true;
     document.getElementById('f-can-delete').checked = false;
-    document.getElementById('folder-select-wrapper').style.display = 'none';
     document.querySelectorAll('#folder-checkboxes input[type=checkbox]').forEach(cb => { cb.checked = false; });
     loadKeys();
   } else {
@@ -298,7 +297,6 @@ function openEditModal(k) {
   const isGlobal = k.prefix === '*' && folders.length === 0;
   document.getElementById('edit-global').checked   = isGlobal;
   document.getElementById('edit-specific').checked = !isGlobal;
-  document.getElementById('edit-folder-wrapper').style.display = isGlobal ? 'none' : 'block';
   renderFolderCheckboxes('edit-folder-checkboxes', CACHED_FOLDERS, folders.map(f => f.id));
 
   document.getElementById('edit-modal').classList.add('open');

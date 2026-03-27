@@ -239,6 +239,12 @@
     .folder-form-row { display: flex; gap: 10px; margin-bottom: 12px; }
     .folder-form-row input { flex: 1; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
     .folder-form-row input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+    /* Show folder picker when "Carpetas específicas" radio is checked — no JS needed */
+    #folder-select-wrapper { display: none; }
+    .scope-radios:has(#f-specific:checked) ~ #folder-select-wrapper { display: block; }
+    #edit-folder-wrapper { display: none; }
+    .scope-radios:has(#edit-specific:checked) ~ #edit-folder-wrapper { display: block; }
   </style>
 </head>
 <body>
@@ -330,7 +336,7 @@
             Carpetas específicas
           </label>
         </div>
-        <div id="folder-select-wrapper" style="display:none;">
+        <div id="folder-select-wrapper">
           <div class="folder-checkboxes" id="folder-checkboxes">
             <span style="color:var(--muted); font-size:13px;">No hay carpetas creadas todavía.</span>
           </div>
@@ -421,7 +427,7 @@
             Carpetas específicas
           </label>
         </div>
-        <div id="edit-folder-wrapper" style="display:none;">
+        <div id="edit-folder-wrapper">
           <div class="folder-checkboxes" id="edit-folder-checkboxes">
             <span style="color:var(--muted); font-size:13px;">No hay carpetas todavía.</span>
           </div>
