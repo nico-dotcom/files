@@ -6,6 +6,7 @@ import { env } from "../config/env";
 import { buildObjectKey, sanitizeFolder } from "../utils/filename";
 import { validateCreateUpload } from "../middleware/validate";
 import { checkScope } from "../middleware/apiKey";
+import { logFileEvent } from "../config/fileEvents";
 
 const router = Router();
 
@@ -123,6 +124,15 @@ router.post(
       res.status(500).json({ error: "Failed to generate upload URL" });
       return;
     }
+
+    logFileEvent({
+      event_type: "upload_initiated",
+      file_id: fileId,
+      api_key_id: req.apiKey?.id,
+      object_key: objectKey,
+      mime_type: mimeType,
+      size_bytes: sizeBytes,
+    });
 
     res.status(201).json({
       fileId,

@@ -4,6 +4,7 @@ import { hasuraQuery } from "../config/hasura";
 import { env } from "../config/env";
 import { validateFileId } from "../middleware/validate";
 import { checkScope } from "../middleware/apiKey";
+import { logFileEvent } from "../config/fileEvents";
 
 const router = Router();
 
@@ -119,6 +120,13 @@ router.post(
       const updated = await hasuraQuery<ConfirmUploadResult>(CONFIRM_UPLOAD, {
         id: fileId,
         uploaded_at: new Date().toISOString(),
+      });
+
+      logFileEvent({
+        event_type: "upload_confirmed",
+        file_id: updated.update_files_by_pk.id,
+        api_key_id: req.apiKey?.id,
+        object_key: updated.update_files_by_pk.object_key,
       });
 
       res.status(200).json({

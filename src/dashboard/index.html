@@ -8,15 +8,15 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:       #0f1117;
-      --surface:  #1a1d27;
-      --border:   #2a2d3e;
+      --bg:       #f8f9fc;
+      --surface:  #ffffff;
+      --border:   #e2e8f0;
       --primary:  #6c63ff;
-      --primary-h:#8b84ff;
-      --danger:   #ff4d4d;
-      --success:  #22c55e;
-      --text:     #e2e8f0;
-      --muted:    #94a3b8;
+      --primary-h:#5a52d5;
+      --danger:   #e53e3e;
+      --success:  #38a169;
+      --text:     #1a202c;
+      --muted:    #718096;
       --mono:     'Fira Mono', 'Consolas', monospace;
     }
 
@@ -113,7 +113,7 @@
     th { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); }
     td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(108,99,255,.04); }
+    tr:hover td { background: rgba(108,99,255,.06); }
 
     .badge {
       display: inline-block;
@@ -122,10 +122,10 @@
       font-size: 11px;
       font-weight: 500;
     }
-    .badge-green  { background: rgba(34,197,94,.15); color: #4ade80; }
-    .badge-red    { background: rgba(255,77,77,.15);  color: #f87171; }
-    .badge-purple { background: rgba(108,99,255,.15); color: var(--primary-h); }
-    .badge-blue   { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .badge-green  { background: rgba(34,197,94,.12);  color: #16a34a; }
+    .badge-red    { background: rgba(220,38,38,.12);  color: #dc2626; }
+    .badge-purple { background: rgba(108,99,255,.12); color: var(--primary-h); }
+    .badge-blue   { background: rgba(59,130,246,.12); color: #2563eb; }
 
     code {
       font-family: var(--mono);
@@ -137,10 +137,12 @@
     }
 
     /* New key modal */
+    .btn-renew { background: var(--primary); color: #fff; padding: 4px 10px; font-size: 12px; margin-right: 4px; }
+
     .modal-overlay {
       display: none;
       position: fixed; inset: 0;
-      background: rgba(0,0,0,.7);
+      background: rgba(0,0,0,.4);
       align-items: center;
       justify-content: center;
       z-index: 100;
@@ -274,8 +276,8 @@
 <!-- ── New key modal ─────────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
-    <h3>✓ Key creada exitosamente</h3>
-    <p>Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.</p>
+    <h3 id="modal-title">✓ Key creada exitosamente</h3>
+    <p id="modal-desc">Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.</p>
     <div class="key-box" id="modal-key"></div>
     <div class="modal-actions">
       <button class="btn-ghost" id="btn-copy-key">Copiar</button>

@@ -126,16 +126,22 @@ function renderKeys(keys) {
     tdStatus.appendChild(statusBadge);
     tr.appendChild(tdStatus);
 
-    // Revoke button
+    // Action buttons
     const tdAction = document.createElement('td');
     if (k.is_active) {
-      const btn = document.createElement('button');
-      btn.className = 'btn-danger';
-      btn.textContent = 'Revocar';
-      // Store the UUID as a data attribute, not in an onclick string
-      btn.dataset.keyId = k.id;
-      btn.addEventListener('click', () => revokeKey(btn.dataset.keyId));
-      tdAction.appendChild(btn);
+      const btnRenew = document.createElement('button');
+      btnRenew.className = 'btn-renew';
+      btnRenew.textContent = 'Renovar';
+      btnRenew.dataset.keyId = k.id;
+      btnRenew.addEventListener('click', () => renewKey(btnRenew.dataset.keyId));
+      tdAction.appendChild(btnRenew);
+
+      const btnRevoke = document.createElement('button');
+      btnRevoke.className = 'btn-danger';
+      btnRevoke.textContent = 'Revocar';
+      btnRevoke.dataset.keyId = k.id;
+      btnRevoke.addEventListener('click', () => revokeKey(btnRevoke.dataset.keyId));
+      tdAction.appendChild(btnRevoke);
     }
     tr.appendChild(tdAction);
 
@@ -169,9 +175,7 @@ async function createKey() {
 
   const res = await apiFetch('/admin/keys', 'POST', body);
   if (res.ok) {
-    // Use textContent to safely display the key — never innerHTML
-    document.getElementById('modal-key').textContent = res.data.key;
-    document.getElementById('modal').classList.add('open');
+    openModal(res.data.key);
     document.getElementById('f-name').value    = '';
     document.getElementById('f-prefix').value  = '*';
     document.getElementById('f-expires').value = '';
@@ -189,7 +193,25 @@ async function revokeKey(id) {
   else toast('Error: ' + (res.data.error || ''), 'err');
 }
 
+// ── Renew key ─────────────────────────────────────────────────────────────────
+async function renewKey(id) {
+  if (!confirm('¿Renovar esta key? Se generará una nueva key con la misma configuración y la actual quedará revocada.')) return;
+  const res = await apiFetch('/admin/keys/' + encodeURIComponent(id) + '/renew', 'POST', {});
+  if (res.ok) {
+    openModal(res.data.key, '✓ Key renovada exitosamente', 'Nueva key generada. La anterior quedó revocada. Copiala ahora.');
+    loadKeys();
+  } else {
+    toast('Error: ' + (res.data.error || ''), 'err');
+  }
+}
+
 // ── Modal ────────────────────────────────────────────────────────────────────
+function openModal(key, title, desc) {
+  document.getElementById('modal-title').textContent = title || '✓ Key creada exitosamente';
+  document.getElementById('modal-desc').textContent  = desc  || 'Esta es la única vez que se muestra la key. Copiala ahora y guardala en un lugar seguro.';
+  document.getElementById('modal-key').textContent   = key;
+  document.getElementById('modal').classList.add('open');
+}
 function closeModal() {
   document.getElementById('modal').classList.remove('open');
 }

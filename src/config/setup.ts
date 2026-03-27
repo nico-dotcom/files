@@ -75,6 +75,20 @@ const SCHEMA_SQL = `
   );
 
   CREATE INDEX IF NOT EXISTS api_keys_is_active_idx ON public.api_keys (is_active);
+
+  CREATE TABLE IF NOT EXISTS public.file_events (
+    id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type   text        NOT NULL,
+    file_id      uuid,
+    api_key_id   text,
+    object_key   text,
+    mime_type    text,
+    size_bytes   bigint,
+    created_at   timestamptz NOT NULL DEFAULT now()
+  );
+
+  CREATE INDEX IF NOT EXISTS file_events_created_at_idx ON public.file_events (created_at DESC);
+  CREATE INDEX IF NOT EXISTS file_events_api_key_id_idx ON public.file_events (api_key_id);
 `;
 
 // ─── Main entry point ──────────────────────────────────────────────────────────
@@ -87,4 +101,7 @@ export async function ensureSchema(): Promise<void> {
 
   await trackTable("public", "api_keys");
   console.log(`  ✓ Table "public.api_keys" is tracked in Hasura`);
+
+  await trackTable("public", "file_events");
+  console.log(`  ✓ Table "public.file_events" is tracked in Hasura`);
 }

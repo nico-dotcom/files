@@ -152,6 +152,19 @@ export async function revokeApiKey(id: string): Promise<boolean> {
   return data.update_api_keys_by_pk !== null;
 }
 
+/** Get a single key by ID (never returns key_hash) */
+export async function getApiKeyById(id: string): Promise<ApiKeyRecord | null> {
+  const data = await hasuraQuery<{ api_keys_by_pk: ApiKeyRecord | null }>(
+    `query GetApiKeyById($id: uuid!) {
+      api_keys_by_pk(id: $id) {
+        id name prefix can_upload can_download is_active expires_at created_at last_used_at
+      }
+    }`,
+    { id }
+  );
+  return data.api_keys_by_pk;
+}
+
 /** List all keys (never returns key_hash) */
 export async function listApiKeys(): Promise<ApiKeyRecord[]> {
   const data = await hasuraQuery<{ api_keys: ApiKeyRecord[] }>(

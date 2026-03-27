@@ -3,7 +3,7 @@
  * All routes require the MASTER_API_KEY (Authorization: Bearer <MASTER_API_KEY>).
  */
 import { Router, Request, Response } from "express";
-import { createApiKey, revokeApiKey, listApiKeys } from "../../config/apiKeys";
+import { createApiKey, revokeApiKey, listApiKeys, getApiKeyById } from "../../config/apiKeys";
 import { isValidUuid } from "../../middleware/validate";
 import { safeEqual } from "../../utils/crypto";
 
@@ -142,6 +142,54 @@ router.delete("/keys/:id", async (req: Request, res: Response): Promise<void> =>
   } catch (err) {
     console.error("[admin/keys] revoke error:", err);
     res.status(500).json({ error: "Failed to revoke key" });
+  }
+});
+
+// ─── POST /admin/keys/:id/renew ───────────────────────────────────────────────
+/**
+ * Revokes the existing key and creates a new one with the same configuration.
+ * Returns the new raw key (shown once).
+ */
+router.post("/keys/:id/renew", async (req: Request, res: Response): Promise<void> => {
+  if (!requireMaster(req, res)) return;
+
+  const { id } = req.params;
+  if (!isValidUuid(id)) {
+    res.status(400).json({ error: "id must be a valid UUID" });
+    return;
+  }
+
+  try {
+    const existing = await getApiKeyById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Key not found" });
+      return;
+    }
+
+    const { record, rawKey } = await createApiKey({
+      name: existing.name,
+      prefix: existing.prefix,
+      can_upload: existing.can_upload,
+      can_download: existing.can_download,
+      expires_at: existing.expires_at,
+    });
+
+    await revokeApiKey(id);
+
+    res.status(201).json({
+      message: "Key renewed. The new raw key is shown only once — save it now.",
+      key: rawKey,
+      id: record.id,
+      name: record.name,
+      prefix: record.prefix,
+      can_upload: record.can_upload,
+      can_download: record.can_download,
+      expires_at: record.expires_at,
+      created_at: record.created_at,
+    });
+  } catch (err) {
+    console.error("[admin/keys] renew error:", err);
+    res.status(500).json({ error: "Failed to renew key" });
   }
 });
 
