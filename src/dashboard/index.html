@@ -204,6 +204,9 @@
 
     .global-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
     .global-row input[type=checkbox] { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
+
+    .delete-perm-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+    .delete-perm-row input[type=checkbox] { accent-color: var(--danger); width: 15px; height: 15px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -291,6 +294,14 @@
         </div>
       </div>
 
+      <div style="grid-column:1/-1;">
+        <div style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px;">Permiso de eliminación</div>
+        <label class="delete-perm-row" style="display:inline-flex;">
+          <input type="checkbox" id="f-can-delete" />
+          Permitir eliminar archivos (can_delete)
+        </label>
+      </div>
+
       <div class="btn-submit">
         <button class="btn-primary" id="btn-create-key">Generar key</button>
       </div>
@@ -306,6 +317,7 @@
           <th>Nombre</th>
           <th>Carpetas</th>
           <th>Operaciones</th>
+          <th>Eliminar</th>
           <th>Último uso</th>
           <th>Expira</th>
           <th>Estado</th>
@@ -313,7 +325,30 @@
         </tr>
       </thead>
       <tbody id="keys-body">
-        <tr><td colspan="7" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+        <tr><td colspan="8" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Files section -->
+  <section>
+    <h2 style="display:flex;align-items:center;gap:12px;">
+      Archivos
+      <button class="btn-ghost" id="btn-refresh-files" style="font-size:12px;padding:4px 10px;">↻ Actualizar</button>
+    </h2>
+    <table id="files-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Ruta (object key)</th>
+          <th>Tipo</th>
+          <th>Tamaño</th>
+          <th>Subido</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="files-body">
+        <tr><td colspan="6" class="empty"><span class="spinner"></span> Cargando...</td></tr>
       </tbody>
     </table>
   </section>

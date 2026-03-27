@@ -18,6 +18,7 @@ export interface ApiKeyRecord {
   prefix: string;
   can_upload: boolean;
   can_download: boolean;
+  can_delete: boolean;
   is_active: boolean;
   expires_at: string | null;
   created_at: string;
@@ -38,7 +39,7 @@ export function generateRawKey(): string {
 // ─── GraphQL fragments ───────────────────────────────────────────────────────
 
 const API_KEY_FIELDS = `
-  id name prefix can_upload can_download is_active expires_at created_at last_used_at
+  id name prefix can_upload can_download can_delete is_active expires_at created_at last_used_at
   api_key_folders {
     folder { id name created_at }
   }
@@ -144,6 +145,7 @@ export async function createApiKey(params: {
   prefix: string;
   can_upload?: boolean;
   can_download?: boolean;
+  can_delete?: boolean;
   expires_at?: string | null;
   folder_ids?: string[];
 }): Promise<{ record: ApiKeyRecord & { key_hash: string }; rawKey: string }> {
@@ -165,6 +167,7 @@ export async function createApiKey(params: {
         prefix: params.prefix,
         can_upload: params.can_upload ?? true,
         can_download: params.can_download ?? true,
+        can_delete: params.can_delete ?? false,
         expires_at: params.expires_at ?? null,
       },
     }

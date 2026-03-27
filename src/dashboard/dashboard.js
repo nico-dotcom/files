@@ -19,10 +19,9 @@ async function login() {
     MASTER_KEY = val;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
-    console.log('[login] calling renderKeys...');
     renderKeys(res.data.keys);
-    console.log('[login] renderKeys done, calling loadFolders...');
     loadFolders();
+    loadFiles();
     // Wire scope radio buttons after app is shown
     document.querySelectorAll('input[name="scope"]').forEach(radio => {
       radio.addEventListener('change', function() {
@@ -56,9 +55,7 @@ async function apiFetch(path, method, body, key) {
 
 // ── Folders ──────────────────────────────────────────────────────────────────
 async function loadFolders() {
-  console.log('[folders] loadFolders() called');
   const res = await apiFetch('/admin/folders', 'GET');
-  console.log('[folders] response:', res.ok, res.status, JSON.stringify(res.data));
   if (res.ok) {
     CACHED_FOLDERS = res.data.folders || [];
     renderFolders(CACHED_FOLDERS);
@@ -159,7 +156,7 @@ async function loadKeys() {
 function renderKeys(keys) {
   const tbody = document.getElementById('keys-body');
   if (!keys || keys.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">No hay keys todavía.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No hay keys todavía.</td></tr>';
     return;
   }
 
@@ -213,6 +210,19 @@ function renderKeys(keys) {
     opsBadge.textContent = ops;
     tdOps.appendChild(opsBadge);
     tr.appendChild(tdOps);
+
+    // Delete permission cell
+    const tdDel = document.createElement('td');
+    if (k.can_delete) {
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-red';
+      badge.textContent = 'Sí';
+      tdDel.appendChild(badge);
+    } else {
+      tdDel.textContent = '—';
+      tdDel.style.color = 'var(--muted)';
+    }
+    tr.appendChild(tdDel);
 
     // Last used
     const tdLast = document.createElement('td');
@@ -271,6 +281,7 @@ async function createKey() {
   const expires = document.getElementById('f-expires').value;
   const ops     = document.getElementById('f-ops').value;
   const isGlobal = document.getElementById('f-global').checked; // radio "global"
+  const canDelete = document.getElementById('f-can-delete').checked;
 
   if (!name) { toast('Ingresá un nombre', 'err'); return; }
 
@@ -291,6 +302,7 @@ async function createKey() {
     prefix: isGlobal ? '*' : 'folder-based',
     can_upload:   ops !== 'download',
     can_download: ops !== 'upload',
+    can_delete:   canDelete,
     expires_at:   expires ? new Date(expires).toISOString() : null,
     folder_ids,
   };
@@ -301,6 +313,7 @@ async function createKey() {
     document.getElementById('f-name').value    = '';
     document.getElementById('f-expires').value = '';
     document.getElementById('f-global').checked = true;
+    document.getElementById('f-can-delete').checked = false;
     document.getElementById('folder-select-wrapper').style.display = 'none';
     document.querySelectorAll('#folder-checkboxes input[type=checkbox]').forEach(cb => { cb.checked = false; });
     loadKeys();
@@ -327,6 +340,76 @@ async function renewKey(id) {
   } else {
     toast('Error: ' + (res.data.error || ''), 'err');
   }
+}
+
+// ── Files ─────────────────────────────────────────────────────────────────────
+async function loadFiles() {
+  const res = await apiFetch('/admin/files', 'GET');
+  if (res.ok) {
+    renderFiles(res.data.files || []);
+  } else {
+    document.getElementById('files-body').innerHTML =
+      '<tr><td colspan="6" class="empty">Error al cargar archivos: ' + (res.data?.error || res.status) + '</td></tr>';
+  }
+}
+
+function renderFiles(files) {
+  const tbody = document.getElementById('files-body');
+  if (!files || files.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No hay archivos todavía.</td></tr>';
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  files.forEach(f => {
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    tdName.textContent = f.original_filename;
+    tr.appendChild(tdName);
+
+    const tdKey = document.createElement('td');
+    const code = document.createElement('code');
+    code.textContent = f.object_key;
+    code.style.fontSize = '11px';
+    tdKey.appendChild(code);
+    tr.appendChild(tdKey);
+
+    const tdMime = document.createElement('td');
+    tdMime.textContent = f.mime_type;
+    tdMime.style.color = 'var(--muted)';
+    tr.appendChild(tdMime);
+
+    const tdSize = document.createElement('td');
+    tdSize.textContent = fmtBytes(f.size_bytes);
+    tdSize.style.color = 'var(--muted)';
+    tr.appendChild(tdSize);
+
+    const tdDate = document.createElement('td');
+    tdDate.textContent = fmtDate(f.created_at);
+    tdDate.style.color = 'var(--muted)';
+    tr.appendChild(tdDate);
+
+    const tdAction = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.className = 'btn-danger';
+    btn.textContent = 'Eliminar';
+    btn.dataset.fileId = f.id;
+    btn.dataset.fileName = f.original_filename;
+    btn.addEventListener('click', () => deleteFile(btn.dataset.fileId, btn.dataset.fileName));
+    tdAction.appendChild(btn);
+    tr.appendChild(tdAction);
+
+    fragment.appendChild(tr);
+  });
+  tbody.innerHTML = '';
+  tbody.appendChild(fragment);
+}
+
+async function deleteFile(id, name) {
+  if (!confirm('¿Eliminar el archivo "' + name + '"? Esta acción no se puede deshacer.')) return;
+  const res = await apiFetch('/admin/files/' + encodeURIComponent(id), 'DELETE');
+  if (res.ok) { toast('Archivo eliminado', 'ok'); loadFiles(); }
+  else toast('Error: ' + (res.data.error || ''), 'err');
 }
 
 // ── Modal ────────────────────────────────────────────────────────────────────
@@ -366,4 +449,10 @@ function relTime(iso) {
   const h = Math.floor(m / 60);
   if (h < 24) return `Hace ${h}h`;
   return `Hace ${Math.floor(h / 24)}d`;
+}
+function fmtBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }

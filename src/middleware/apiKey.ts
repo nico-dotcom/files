@@ -41,6 +41,7 @@ export async function requireApiKey(
       prefix: "*",
       can_upload: true,
       can_download: true,
+      can_delete: true,
       is_active: true,
       expires_at: null,
       created_at: new Date().toISOString(),

@@ -11,6 +11,8 @@ import confirmUploadRouter from "./routes/confirmUpload";
 import createDownloadUrlRouter from "./routes/createDownloadUrl";
 import adminKeysRouter from "./routes/admin/keys";
 import adminFoldersRouter from "./routes/admin/folders";
+import adminFilesRouter from "./routes/admin/files";
+import deleteFileRouter from "./routes/deleteFile";
 
 const app = express();
 
@@ -84,12 +86,14 @@ app.use(
 
 app.use("/admin", adminLimiter, adminKeysRouter);
 app.use("/admin", adminLimiter, adminFoldersRouter);
+app.use("/admin", adminLimiter, adminFilesRouter);
 
 // ─── API routes (scoped API key required) ─────────────────────────────────────
 
 app.use("/", requireApiKey, createUploadRouter);
 app.use("/", requireApiKey, confirmUploadRouter);
 app.use("/", requireApiKey, createDownloadUrlRouter);
+app.use("/", requireApiKey, deleteFileRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 
