@@ -14,6 +14,9 @@ import adminFoldersRouter from "./routes/admin/folders";
 
 const app = express();
 
+// Trust the first proxy (Cloudflare Tunnel sets X-Forwarded-For)
+app.set("trust proxy", 1);
+
 // ─── Security middleware ──────────────────────────────────────────────────────
 
 app.use(
