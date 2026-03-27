@@ -58,19 +58,18 @@ async function connect() {
   const statusEl = document.getElementById('connect-status');
   statusEl.textContent = 'Verificando…';
 
-  // Probe with a dummy health-like call — we'll try /create-download-url with a fake ID
-  // to see if the key authenticates at all (expecting 400/404/422, not 401/403)
+  // Set key first so apiFetch sends it; clear if auth fails
+  API_KEY = key;
   const res = await apiFetch('/create-download-url', 'POST', { fileId: '00000000-0000-0000-0000-000000000000' });
   const authOk = res.status !== 401 && res.status !== 403;
 
   if (!authOk) {
+    API_KEY = '';
     statusEl.textContent = '✗ Key inválida o revocada';
     statusEl.style.color = 'var(--danger)';
     log('Autenticación fallida: ' + (res.data.error || res.status), 'err');
     return;
   }
-
-  API_KEY = key;
   USER_ID = uid;
   statusEl.textContent = '✓ Conectado';
   statusEl.style.color = 'var(--success)';
