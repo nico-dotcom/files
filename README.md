@@ -3,15 +3,15 @@
 Microservicio seguro de carga de archivos usando **MinIO presigned URLs** + **Hasura GraphQL**,
 expuesto externamente vía **Cloudflare Tunnel** (sin puertos de entrada abiertos).
 
-El sistema gestiona API keys con alcance de carpeta (prefix) desde un dashboard web.
-Nunca se almacena una key en texto plano — solo el hash SHA-256.
+Las API keys tienen scope por **carpeta** (many-to-many), permisos granulares, y el schema de
+base de datos se crea automáticamente al iniciar el servicio.
 
 ```
-Frontend → POST /create-upload        → Upload API (api.yourdomain.com)
-Frontend → PUT  <presignedPutUrl>     → MinIO S3 directo (storage.yourdomain.com)
-Frontend → POST /confirm-upload       → Upload API
-Frontend → POST /create-download-url  → Upload API
-Frontend → GET  <presignedGetUrl>     → MinIO S3 directo (storage.yourdomain.com)
+Frontend → POST /create-upload        → API (upload.tudominio.com)
+Frontend → PUT  <presignedPutUrl>     → MinIO directo (files.tudominio.com)
+Frontend → POST /confirm-upload       → API
+Frontend → POST /create-download-url  → API
+Frontend → GET  <presignedGetUrl>     → MinIO directo (files.tudominio.com)
 ```
 
 ---
@@ -19,55 +19,55 @@ Frontend → GET  <presignedGetUrl>     → MinIO S3 directo (storage.yourdomain
 ## Estructura del proyecto
 
 ```
-/
-├── src/
-│   ├── config/
-│   │   ├── env.ts              # Variables de entorno tipadas y validadas
-│   │   ├── minio.ts            # Cliente MinIO interno + cliente público (presigned URLs)
-│   │   ├── hasura.ts           # Cliente GraphQL mínimo
-│   │   ├── db.ts               # Pool PostgreSQL para la tabla api_keys
-│   │   └── apiKeys.ts          # CRUD de API keys + isAllowedPrefix
-│   ├── middleware/
-│   │   ├── apiKey.ts           # Authorization: Bearer — lookup en DB + checkScope()
-│   │   └── validate.ts         # Allowlist MIME, chequeos UUID, límite de tamaño
-│   ├── routes/
-│   │   ├── createUpload.ts         # POST /create-upload
-│   │   ├── confirmUpload.ts        # POST /confirm-upload
-│   │   ├── createDownloadUrl.ts    # POST /create-download-url
-│   │   └── admin/
-│   │       └── keys.ts             # GET|POST|DELETE /admin/keys[/:id]
-│   ├── dashboard/
-│   │   ├── index.html          # Dashboard SPA (sin JS inline)
-│   │   ├── dashboard.js        # Lógica del dashboard
-│   │   └── dashboard-init.js   # Wiring de botones
-│   ├── utils/
-│   │   ├── filename.ts         # sanitizeFilename, sanitizeFolder, buildObjectKey
-│   │   └── crypto.ts           # safeEqual() — comparación en tiempo constante
-│   └── index.ts                # Express app + startup
-├── cloudflared/
-│   ├── config.yml              # Reglas de ingreso del Cloudflare Tunnel
-│   └── .gitignore              # Excluye credentials.json del repositorio
-├── examples/
-│   ├── frontend-upload.ts      # Flujo de upload desde el browser con progreso
-│   └── api-requests.http       # Ejemplos REST Client / cURL
-├── .env.example
-├── Dockerfile
-└── docker-compose.yml
+src/
+├── config/
+│   ├── env.ts              # Variables de entorno tipadas y validadas
+│   ├── minio.ts            # Cliente MinIO interno + cliente público (presigned URLs)
+│   ├── hasura.ts           # Cliente GraphQL mínimo
+│   ├── setup.ts            # Crea tablas y relaciones en Hasura al iniciar (idempotente)
+│   ├── apiKeys.ts          # CRUD de API keys + isAllowed()
+│   ├── folders.ts          # CRUD de carpetas
+│   ├── files.ts            # Listado y borrado suave de archivos
+│   └── fileEvents.ts       # Log de tráfico (fire-and-forget)
+├── middleware/
+│   ├── apiKey.ts           # Authorization: Bearer — lookup + checkScope()
+│   └── validate.ts         # Allowlist MIME, chequeos UUID, límite de tamaño
+├── routes/
+│   ├── createUpload.ts         # POST /create-upload
+│   ├── confirmUpload.ts        # POST /confirm-upload
+│   ├── createDownloadUrl.ts    # POST /create-download-url
+│   ├── deleteFile.ts           # DELETE /files/:fileId
+│   └── admin/
+│       ├── keys.ts             # GET|POST|PUT|DELETE /admin/keys[/:id]
+│       ├── folders.ts          # GET|POST|DELETE /admin/folders[/:id]
+│       └── files.ts            # GET|DELETE /admin/files[/:id]
+├── dashboard/
+│   ├── index.html          # Dashboard SPA (sin JS inline)
+│   ├── dashboard.js        # Lógica del dashboard
+│   ├── dashboard-init.js   # Wiring de botones
+│   ├── test.html           # Página de test de API
+│   └── test.js             # Lógica de la página de test
+├── utils/
+│   ├── filename.ts         # sanitizeFilename, sanitizeFolder, buildObjectKey
+│   └── crypto.ts           # safeEqual() — comparación en tiempo constante
+└── index.ts                # Express app + startup
 ```
 
 ---
 
-## Quick start (local)
+## Quick start
 
 ```bash
 npm install
 cp .env.example .env
-# Editar .env — como mínimo: MASTER_API_KEY, S3_ACCESS_KEY, S3_SECRET_KEY,
-#                             POSTGRES_PASSWORD, HASURA_ADMIN_SECRET
+# Completar .env (ver sección Variables de entorno)
 npm run dev
 ```
 
-Luego abrir el dashboard en **http://localhost:3001/dashboard** para crear las primeras API keys.
+Al iniciar, el servicio crea automáticamente todas las tablas necesarias en Postgres vía Hasura.
+No hace falta correr SQL manualmente.
+
+Abrí el dashboard en **http://localhost:3002/dashboard** y la página de test en **http://localhost:3002/test**.
 
 Build para producción:
 
@@ -82,277 +82,97 @@ npm start
 
 | Variable | Requerida | Default | Descripción |
 |---|---|---|---|
-| `PORT` | no | `3001` | Puerto HTTP del servicio |
+| `PORT` | no | `3002` | Puerto HTTP del servicio |
 | `MASTER_API_KEY` | **sí** | — | Clave maestra para el dashboard y `/admin/*`. **Mínimo 32 caracteres.** |
-| `POSTGRES_HOST` | no | `localhost` | Host del servidor PostgreSQL |
-| `POSTGRES_PORT` | no | `5432` | Puerto PostgreSQL |
-| `POSTGRES_DB` | **sí** | — | Nombre de la base de datos |
-| `POSTGRES_USER` | **sí** | — | Usuario PostgreSQL |
-| `POSTGRES_PASSWORD` | **sí** | — | Contraseña PostgreSQL |
 | `S3_ENDPOINT` | **sí** | — | Hostname interno de MinIO (sin protocolo ni puerto) |
 | `S3_PORT` | no | `9000` | Puerto MinIO interno |
 | `S3_USE_SSL` | no | `false` | TLS para la conexión interna con MinIO |
 | `S3_ACCESS_KEY` | **sí** | — | Access key de MinIO |
 | `S3_SECRET_KEY` | **sí** | — | Secret key de MinIO. **Mínimo 16 caracteres.** |
 | `S3_BUCKET` | **sí** | — | Nombre del bucket en MinIO |
-| `S3_PUBLIC_URL` | no | — | URL pública de MinIO vía Cloudflare (ej: `https://storage.yourdomain.com`) |
+| `S3_PUBLIC_URL` | **sí** | — | URL pública de MinIO vía Cloudflare (ej: `https://files.tudominio.com`) |
 | `PRESIGNED_URL_EXPIRY_SECONDS` | no | `900` | Duración de presigned URLs (15 min) |
 | `MAX_FILE_SIZE_BYTES` | no | `104857600` | Tamaño máximo de subida (100 MB) |
 | `HASURA_GRAPHQL_URL` | **sí** | — | URL completa del endpoint GraphQL de Hasura |
 | `HASURA_ADMIN_SECRET` | **sí** | — | Secret de admin de Hasura. **Mínimo 16 caracteres.** |
-| `HASURA_GRAPHQL_DATABASE_URL` | **sí** (docker) | — | Postgres URL completa para Hasura. Formato: `postgres://user:pass@host:5432/db` |
-| `MINIO_ROOT_USER` | no | `minioadmin` | Usuario root de MinIO (solo docker-compose). Cambiar en producción. |
-| `MINIO_ROOT_PASSWORD` | **sí** (docker) | — | Contraseña root de MinIO (solo docker-compose). **Cambiar siempre del default.** |
+| `MINIO_ROOT_USER` | no | — | Usuario root de MinIO (solo docker-compose) |
+| `MINIO_ROOT_PASSWORD` | no | — | Contraseña root de MinIO (solo docker-compose) |
 
-> **Nota de seguridad:** El servidor rechaza el inicio si `MASTER_API_KEY` tiene menos de 32 caracteres
-> o si `HASURA_ADMIN_SECRET` / `S3_SECRET_KEY` tienen menos de 16.
+> El servidor no arranca si `MASTER_API_KEY` < 32 chars o si `HASURA_ADMIN_SECRET`/`S3_SECRET_KEY` < 16 chars.
 > Generá valores seguros con: `openssl rand -hex 32`
 
 ---
 
-## Gestión de API keys
+## Dashboard
 
-### Dashboard web
+Abrí `/dashboard` e ingresá tu `MASTER_API_KEY`.
 
-Abrí `http://localhost:3001/dashboard` (o `https://api.yourdomain.com/dashboard` en producción).
+### Carpetas
 
-Ingresá tu `MASTER_API_KEY` para autenticarte. Desde ahí podés:
-- Crear keys con scope de carpeta, permisos de operación y vencimiento opcional
-- Ver todas las keys activas y su último uso
-- Revocar keys al instante
+Las carpetas son entidades de primera clase. Se crean desde la sección "Carpetas" del dashboard.
+Los nombres pueden incluir subcarpetas con `/` (ej: `imagenes/perfil`, `documentos/2024`).
 
-La key completa (el bearer token) **solo se muestra una vez** al crearla.
+### API Keys
 
-> **Nota de seguridad:** `/dashboard` no requiere autenticación a nivel de servidor —
-> cualquiera que pueda alcanzar la URL verá la pantalla de login.
-> En producción protegé la ruta con
-> [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/)
-> para agregar una capa de autenticación antes de que llegue al servidor.
+Cada key puede tener:
+- **Acceso global** (`*`) — todos los archivos del bucket
+- **Carpetas específicas** — acceso solo a las carpetas asignadas (many-to-many)
+- **Operaciones**: Subir y descargar / Solo subir / Solo descargar
+- **Permiso de eliminación** (`can_delete`) — permite `DELETE /files/:fileId`
+- **Vencimiento** — opcional, la key se rechaza después de la fecha
 
-### Scopes (prefijo de carpeta)
+Desde la tabla de keys podés:
+- **Editar** una key activa (cambiar permisos y carpetas sin generar una nueva)
+- **Renovar** — genera una nueva key con la misma configuración, revoca la anterior
+- **Revocar** — desactiva la key (sigue apareciendo en la lista)
+- **Eliminar** — solo disponible para keys revocadas, las borra permanentemente
 
-El campo **prefijo** define a qué carpeta del bucket puede acceder la key:
+La key completa solo se muestra una vez al crearla o renovarla.
 
-| Prefijo | Acceso |
+### Página de test (`/test`)
+
+Permite testear el flujo completo con una API key:
+1. Ingresar la key (se guarda solo en memoria, no en localStorage)
+2. Subir un archivo (con barra de progreso)
+3. Ver (abre URL de descarga en nueva pestaña)
+4. Eliminar (si la key tiene `can_delete`)
+
+---
+
+## Sistema de carpetas
+
+Al crear una key con carpetas específicas, el acceso queda restringido a esas carpetas:
+
+| Key | Puede acceder |
 |---|---|
-| `*` | Todos los archivos del bucket |
-| `infopublica/` | Solo archivos bajo `uploads/<userId>/infopublica/` |
-| `documentos/` | Solo archivos bajo `uploads/<userId>/documentos/` |
+| Global (`*`) | Todos los archivos |
+| Carpeta `infopublica` | Solo archivos bajo `uploads/.../infopublica/...` |
+| Carpetas `facturas` + `contratos` | Archivos bajo cualquiera de las dos |
 
-Cuando una key tiene un prefijo específico, el campo `folder` en `/create-upload`
-se ignora — la carpeta siempre será la del scope de la key.
+Si una key tiene una sola carpeta asignada, el campo `folder` en `/create-upload` se ignora — todos los archivos van a esa carpeta automáticamente.
 
-### API de admin (para automatización)
-
-Todos los endpoints `/admin/*` requieren `Authorization: Bearer <MASTER_API_KEY>`.
-
-```bash
-# Listar keys
-curl https://api.yourdomain.com/admin/keys \
-  -H "Authorization: Bearer $MASTER_API_KEY"
-
-# Crear key
-curl -X POST https://api.yourdomain.com/admin/keys \
-  -H "Authorization: Bearer $MASTER_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Frontend – infopublica",
-    "prefix": "infopublica/",
-    "can_upload": true,
-    "can_download": false,
-    "expires_at": null
-  }'
-
-# Revocar key
-curl -X DELETE https://api.yourdomain.com/admin/keys/<key-id> \
-  -H "Authorization: Bearer $MASTER_API_KEY"
-```
-
----
-
-## Cloudflare Tunnel setup
-
-### Por qué dos hostnames
-
-| Hostname | Puerto | Quién lo usa |
-|---|---|---|
-| `api.yourdomain.com` | 3001 | Frontend → llamadas a la API del backend |
-| `storage.yourdomain.com` | 9000 | Frontend → uploads/downloads directos a MinIO |
-
-**El flujo de upload nunca pasa los bytes a través del backend.** El backend solo genera
-la presigned URL. El browser hace el PUT directamente a `storage.yourdomain.com`,
-que Cloudflare Tunnel reenvía al puerto 9000 de MinIO.
-
-### Critical: MINIO_SERVER_URL
-
-MinIO embebe el hostname del servidor dentro de cada presigned URL que genera.
-Sin `MINIO_SERVER_URL`, ese hostname es `localhost:9000` — inútil para un browser externo.
-
-Ya configurado en `docker-compose.yml`:
-
-```yaml
-environment:
-  MINIO_SERVER_URL: https://storage.yourdomain.com
-```
-
-El backend también usa `S3_PUBLIC_URL` al instanciar el cliente SDK que genera las presigned URLs,
-para que ambos lados acuerden el hostname público.
-
-### Setup paso a paso
-
-**1. Instalar cloudflared**
-
-```bash
-# Debian/Ubuntu
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
-sudo dpkg -i cloudflared.deb
-```
-
-**2. Autenticarse con Cloudflare**
-
-```bash
-cloudflared tunnel login
-# Abre un browser — autorizar el dominio que se quiere usar
-# Guarda un certificado en ~/.cloudflared/cert.pem
-```
-
-**3. Crear un tunnel con nombre**
-
-```bash
-cloudflared tunnel create my-app
-# Output: Created tunnel my-app with id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-# Credentials saved to ~/.cloudflared/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.json
-```
-
-**4. Copiar credenciales al proyecto**
-
-```bash
-cp ~/.cloudflared/<TUNNEL_ID>.json ./cloudflared/credentials.json
-# Este archivo está en .gitignore — nunca commitear
-```
-
-**5. Editar `cloudflared/config.yml`**
-
-```yaml
-tunnel: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx   # ← tu tunnel ID
-credentials-file: /etc/cloudflared/credentials.json
-
-ingress:
-  - hostname: api.yourdomain.com
-    service: http://minio-upload-service:3001
-
-  - hostname: storage.yourdomain.com
-    service: http://minio:9000
-
-  - hostname: minio-console.yourdomain.com     # opcional
-    service: http://minio:9001
-
-  - service: http_status:404
-```
-
-**6. Crear registros DNS en Cloudflare**
-
-```bash
-cloudflared tunnel route dns my-app api.yourdomain.com
-cloudflared tunnel route dns my-app storage.yourdomain.com
-cloudflared tunnel route dns my-app minio-console.yourdomain.com   # opcional
-```
-
-Esto crea registros CNAME apuntando a `<TUNNEL_ID>.cfargotunnel.com`.
-Cloudflare gestiona HTTPS automáticamente — sin certificados que mantener.
-
-**7. Configurar variables de entorno**
-
-En `.env`:
-
-```env
-S3_PUBLIC_URL=https://storage.yourdomain.com
-```
-
-En `docker-compose.yml` (ya está configurado):
-
-```yaml
-MINIO_SERVER_URL: https://storage.yourdomain.com
-```
-
-**8. Levantar todo**
-
-```bash
-docker compose up -d
-```
-
-**9. Verificar**
-
-```bash
-# API accesible
-curl https://api.yourdomain.com/health
-
-# MinIO accesible
-curl https://storage.yourdomain.com/minio/health/live
-```
-
----
-
-## Docker Compose
-
-```bash
-# Copiar y completar todos los secrets
-cp .env.example .env
-
-# Levantar el stack completo
-docker compose up -d
-
-# Logs
-docker compose logs -f minio-upload-service
-docker compose logs -f cloudflared
-```
-
-El `docker-compose.yml` incluye:
-- **minio-upload-service** — la API
-- **MinIO** — almacenamiento de objetos
-- **Hasura** — GraphQL sobre la tabla `files`
-- **cloudflared** — tunnel hacia Cloudflare
-
-> **Nota:** PostgreSQL **no está incluido** en el `docker-compose.yml`.
-> Proveer `HASURA_GRAPHQL_DATABASE_URL` y `POSTGRES_*` apuntando a tu instancia Postgres existente,
-> o agregar un servicio `postgres` al compose si no tenés uno.
-
-Correr solo el servicio de upload (si MinIO/Hasura/Postgres ya corren en otro lado):
-
-```bash
-docker build -t minio-upload-service .
-docker run -p 3001:3001 --env-file .env minio-upload-service
-```
+Si tiene múltiples carpetas, el campo `folder` es **requerido** y debe ser una de las carpetas asignadas.
 
 ---
 
 ## Referencia de API
 
-Todos los endpoints excepto `/health` y `/dashboard` requieren:
+Todos los endpoints (excepto `/health`, `/dashboard`, `/test`) requieren:
 
 ```
 Authorization: Bearer <api-key>
 Content-Type: application/json
 ```
 
-Donde `<api-key>` es una key creada desde el dashboard o la API admin.
-Para los endpoints `/admin/*` usar la `MASTER_API_KEY`.
+Para `/admin/*` usar la `MASTER_API_KEY`.
 
 ---
 
 ### `GET /health`
 
-Sin autenticación.
-
 ```json
 { "status": "ok", "timestamp": "2024-01-15T10:30:00.000Z" }
 ```
-
----
-
-### `GET /dashboard`
-
-Sin autenticación de bearer — la propia página pide la `MASTER_API_KEY` al cargar.
 
 ---
 
@@ -362,11 +182,11 @@ Sin autenticación de bearer — la propia página pide la `MASTER_API_KEY` al c
 
 ```json
 {
-  "filename":  "report.pdf",
+  "filename":  "reporte.pdf",
   "mimeType":  "application/pdf",
   "sizeBytes": 204800,
   "userId":    "550e8400-e29b-41d4-a716-446655440000",
-  "folder":    "infopublica"
+  "folder":    "facturas"
 }
 ```
 
@@ -376,277 +196,215 @@ Sin autenticación de bearer — la propia página pide la `MASTER_API_KEY` al c
 | `mimeType` | sí | MIME type (debe estar en el allowlist) |
 | `sizeBytes` | sí | Tamaño en bytes |
 | `userId` | sí | UUID del usuario dueño del archivo |
-| `folder` | no | Carpeta destino. Si la key tiene un prefijo específico, este campo se ignora y se usa el prefijo de la key. Default: `general` |
+| `folder` | condicional | Carpeta destino. Requerido si la key tiene múltiples carpetas. Ignorado si tiene exactamente una. Default para keys globales: `general`. |
 
 **Response `201`:**
 
 ```json
 {
-  "fileId":           "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "uploadUrl":        "https://storage.yourdomain.com/files/uploads/...?X-Amz-Signature=...",
-  "objectKey":        "uploads/550e8400-.../infopublica/2024-01-15/a1b2c3d4-report.pdf",
+  "fileId":           "a1b2c3d4-...",
+  "uploadUrl":        "https://files.tudominio.com/bucket/uploads/...?X-Amz-Signature=...",
+  "objectKey":        "uploads/550e8400-.../facturas/2024-01-15/a1b2c3d4-reporte.pdf",
   "expiresInSeconds": 900
 }
 ```
-
-La `uploadUrl` es un **presigned PUT** para MinIO. El frontend lo usa directamente —
-no se necesita API key para este llamado, la firma HMAC en la URL es la credencial.
 
 ---
 
 ### `POST /confirm-upload`
 
-**Request:**
+**Request:** `{ "fileId": "..." }`
 
-```json
-{ "fileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
-```
+Verifica que el objeto exista en MinIO antes de marcar como `uploaded`.
 
 **Response `200`:**
 
 ```json
 {
-  "fileId":           "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "status":           "uploaded",
-  "uploadedAt":       "2024-01-15T10:31:05.123Z",
-  "objectKey":        "uploads/550e8400-.../infopublica/2024-01-15/a1b2c3d4-report.pdf",
-  "originalFilename": "report.pdf"
+  "fileId": "...", "status": "uploaded",
+  "uploadedAt": "...", "objectKey": "...", "originalFilename": "reporte.pdf"
 }
-```
-
-**Error `403`** — la key no tiene scope sobre el archivo:
-
-```json
-{ "error": "Access denied: this key is scoped to prefix \"documentos/\"" }
-```
-
-**Error `422`** — el objeto no existe en MinIO (el upload no completó):
-
-```json
-{ "error": "Object not found in storage. Complete the upload before confirming." }
 ```
 
 ---
 
 ### `POST /create-download-url`
 
-**Request:**
-
-```json
-{ "fileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
-```
+**Request:** `{ "fileId": "..." }`
 
 **Response `200`:**
 
 ```json
 {
-  "downloadUrl":      "https://storage.yourdomain.com/files/uploads/...?X-Amz-Signature=...",
+  "downloadUrl": "https://files.tudominio.com/...?X-Amz-Signature=...",
   "expiresInSeconds": 900,
-  "originalFilename": "report.pdf",
-  "mimeType":         "application/pdf",
-  "objectKey":        "uploads/550e8400-.../infopublica/2024-01-15/a1b2c3d4-report.pdf"
+  "originalFilename": "reporte.pdf",
+  "mimeType": "application/pdf",
+  "objectKey": "..."
 }
 ```
 
 ---
 
-## Uso desde el frontend
+### `DELETE /files/:fileId`
 
-### Flujo completo (fetch / TypeScript)
+Requiere `can_delete: true` en la key. La key debe tener scope sobre el archivo.
+Soft-delete: marca `deleted_at` en la DB y elimina el objeto de MinIO.
 
-```typescript
-const API = "https://api.yourdomain.com";
-// La key viene de una variable de entorno del frontend — nunca hardcodeada
-const API_KEY = process.env.NEXT_PUBLIC_UPLOAD_KEY;
+**Response `200`:** `{ "message": "File deleted", "id": "..." }`
 
-const headers = {
-  "Content-Type": "application/json",
-  "Authorization": `Bearer ${API_KEY}`,
-};
+**Errores:**
+- `403` — key sin `can_delete`, o archivo fuera del scope de la key
+- `404` — archivo no encontrado
+- `410` — archivo ya eliminado
 
-// ── Paso 1: solicitar presigned URL ───────────────────────────────────────────
-const createRes = await fetch(`${API}/create-upload`, {
-  method: "POST",
-  headers,
-  body: JSON.stringify({
-    filename:  file.name,
-    mimeType:  file.type,
-    sizeBytes: file.size,
-    userId:    "550e8400-e29b-41d4-a716-446655440000",
-    folder:    "infopublica",   // opcional, ignorado si la key tiene prefijo fijo
-  }),
-});
-const { fileId, uploadUrl } = await createRes.json();
+---
 
-// ── Paso 2: PUT del archivo directo a MinIO (sin API key — la URL es auto-autenticante)
-await fetch(uploadUrl, {
-  method: "PUT",
-  headers: { "Content-Type": file.type },
-  body: file,   // objeto File de <input type="file">
-});
+### `GET /admin/folders`
 
-// ── Paso 3: confirmar ─────────────────────────────────────────────────────────
-await fetch(`${API}/confirm-upload`, {
-  method: "POST",
-  headers,
-  body: JSON.stringify({ fileId }),
-});
+Lista todas las carpetas.
 
-// ── Paso 4: URL de descarga ───────────────────────────────────────────────────
-const dlRes = await fetch(`${API}/create-download-url`, {
-  method: "POST",
-  headers,
-  body: JSON.stringify({ fileId }),
-});
-const { downloadUrl } = await dlRes.json();
-
-window.open(downloadUrl);   // o asignar a <a href> / <img src>
-```
-
-### Ejemplos cURL
-
-```bash
-API="https://api.yourdomain.com"
-KEY="sk_..."   # key creada desde el dashboard
-
-# 1. Crear upload
-RESPONSE=$(curl -s -X POST "$API/create-upload" \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "filename": "test.pdf",
-    "mimeType": "application/pdf",
-    "sizeBytes": 204800,
-    "userId": "550e8400-e29b-41d4-a716-446655440000"
-  }')
-
-FILE_ID=$(echo $RESPONSE | jq -r .fileId)
-UPLOAD_URL=$(echo $RESPONSE | jq -r .uploadUrl)
-
-# 2. Subir a MinIO directamente — la URL es auto-autenticante
-curl -s -X PUT "$UPLOAD_URL" \
-  -H "Content-Type: application/pdf" \
-  --data-binary @test.pdf
-
-# 3. Confirmar
-curl -s -X POST "$API/confirm-upload" \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
-  -d "{\"fileId\": \"$FILE_ID\"}" | jq .
-
-# 4. URL de descarga
-curl -s -X POST "$API/create-download-url" \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
-  -d "{\"fileId\": \"$FILE_ID\"}" | jq .
+```json
+{ "folders": [{ "id": "...", "name": "facturas", "created_at": "..." }] }
 ```
 
 ---
 
-## Resumen de seguridad
+### `POST /admin/folders`
 
-| Preocupación | Cómo se maneja |
+**Request:** `{ "name": "facturas" }` — puede incluir `/` para subcarpetas (ej: `imagenes/perfil`)
+
+---
+
+### `DELETE /admin/folders/:id`
+
+Elimina la carpeta. Las keys que la tenían asignada pierden acceso. Los archivos en MinIO no se borran.
+
+---
+
+### `GET /admin/keys`
+
+Lista todas las keys (nunca devuelve el hash).
+
+---
+
+### `POST /admin/keys`
+
+**Request:**
+
+```json
+{
+  "name":         "Frontend – facturas",
+  "can_upload":   true,
+  "can_download": true,
+  "can_delete":   false,
+  "expires_at":   null,
+  "folder_ids":   ["uuid-carpeta-1", "uuid-carpeta-2"]
+}
+```
+
+Omitir `folder_ids` o enviar `[]` + `"prefix": "*"` para key global.
+
+**Response `201`:** incluye `key` (bearer token, solo se muestra una vez).
+
+---
+
+### `PUT /admin/keys/:id`
+
+Edita permisos y carpetas de una key existente. No genera una nueva key.
+
+**Request:** `{ can_upload, can_download, can_delete, expires_at, folder_ids }`
+
+---
+
+### `DELETE /admin/keys/:id`
+
+- Sin parámetros: revoca (soft-delete, `is_active = false`)
+- Con `?hard=true`: elimina permanentemente de la DB
+
+---
+
+### `POST /admin/keys/:id/renew`
+
+Genera una nueva key con la misma configuración y revoca la anterior.
+Devuelve el nuevo bearer token (solo una vez).
+
+---
+
+### `GET /admin/files`
+
+Lista archivos no eliminados (máx 200). Filtro opcional: `?folder=facturas`.
+
+---
+
+### `DELETE /admin/files/:id`
+
+Elimina un archivo permanentemente (soft-delete en DB + `removeObject` en MinIO).
+
+---
+
+## Cloudflare Tunnel
+
+Dos hostnames:
+
+| Hostname | Puerto | Uso |
+|---|---|---|
+| `upload.tudominio.com` | 3002 | API (frontend → backend) |
+| `files.tudominio.com` | 9000 | MinIO directo (presigned URLs) |
+
+El backend genera las presigned URLs apuntando a `files.tudominio.com` (configurado en `S3_PUBLIC_URL`).
+El browser hace PUT/GET directamente a MinIO — los bytes nunca pasan por el backend.
+
+**`/etc/cloudflared/config.yml` (servicio del sistema):**
+
+```yaml
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: upload.tudominio.com
+    service: http://localhost:3002
+
+  - hostname: files.tudominio.com
+    service: http://localhost:9000
+
+  - service: http_status:404
+```
+
+---
+
+## Seguridad
+
+| Aspecto | Implementación |
 |---|---|
-| Autenticación de endpoints | `Authorization: Bearer <key>` en todas las rutas excepto `/health` y `/dashboard` |
-| Keys hasheadas en DB | Solo se almacena el SHA-256 del bearer token — nunca el valor en texto plano |
-| Comparación en tiempo constante | `crypto.timingSafeEqual` con Buffers de longitud fija — no filtra el largo de la key |
-| `S3_SECRET_KEY` nunca expuesta | Solo del lado del servidor; el frontend nunca la ve |
-| Presigned URL = auto-autenticante | Uploads/downloads con URLs HMAC-firmadas — sin credenciales en el request |
-| Expiración de presigned URLs | 15 min por default (`PRESIGNED_URL_EXPIRY_SECONDS`) |
-| Scope de keys por carpeta | Una key `infopublica/` solo puede acceder a `uploads/<userId>/infopublica/*` |
-| Scope verificado en confirm | `/confirm-upload` verifica el scope antes de marcar el archivo |
-| Confirmaciones falsas bloqueadas | `statObject` verifica que el objeto exista en MinIO antes de confirmar |
-| Sanitización de filename | `sanitizeFilename()` elimina path traversal y chars especiales |
-| Sanitización de folder | `sanitizeFolder()` — solo alfanumérico + guiones; no permite slashes |
-| Allowlist de MIME types | Lista explícita en `middleware/validate.ts` |
-| Límite de tamaño | Validado vía `sizeBytes`; body JSON limitado a 16 KB |
-| Rate limiting general | 60 req/min por IP vía `express-rate-limit` |
-| Rate limiting en admin | 10 req/15min por IP en `/admin/*` (cuenta todas las requests) |
-| Mínimo de largo en secrets | El servidor no arranca si `MASTER_API_KEY` < 32 chars o secrets < 16 chars |
-| Headers HTTP | `helmet` configura CSP, HSTS, X-Frame-Options, etc. |
-| CSP sin `unsafe-inline` en scripts | Dashboard JS servido como archivos estáticos — sin scripts inline |
-| Estilos inline permitidos en CSP | `styleSrc` incluye `'unsafe-inline'` para los `style=` del dashboard — aceptable ya que el HTML es estático y serverside no ejecuta CSS del usuario |
-| Dashboard sin auth de servidor | `/dashboard` accesible sin credenciales de servidor — proteger con Cloudflare Access en producción |
-| XSS en dashboard | Tabla de keys construida con `createElement`/`textContent` — sin `innerHTML` inseguro |
-| Contenedor no-root | Docker corre como `appuser` |
-| Credenciales del tunnel en gitignore | `cloudflared/credentials.json` excluido del repositorio |
-| Sin puertos de entrada abiertos | Cloudflare Tunnel es solo saliente; el firewall permanece cerrado |
-
----
-
-## Setup de permisos en Hasura
-
-1. Abrir Hasura Console → Data → `public.files` → Permissions
-2. Crear un rol (ej: `backend`) y configurar:
-   - **Insert**: todas las columnas excepto `id`, `created_at` (usar defaults de la DB)
-   - **Select**: todas las columnas
-   - **Update**: solo columnas `status`, `uploaded_at`
-3. Usar el admin secret en este microservicio (ya configurado vía `HASURA_ADMIN_SECRET`)
-
-> En producción, considerar reemplazar el admin secret con JWT por rol
-> para que cada servicio tenga permisos mínimos.
+| Keys hasheadas | Solo SHA-256 en DB, nunca texto plano |
+| Comparación en tiempo constante | `crypto.timingSafeEqual` — no filtra longitud |
+| Scope verificado en todos los endpoints | Upload, confirm, download y delete verifican carpeta |
+| `can_delete` por key | Delete requiere permiso explícito |
+| Confirmaciones falsas bloqueadas | `statObject` verifica que el objeto exista antes de confirmar |
+| Sanitización de nombres | Path traversal y chars especiales eliminados |
+| Allowlist MIME | Lista explícita en `validate.ts` |
+| Rate limiting | 60 req/min general, 200 req/15min en `/admin/*` |
+| Headers HTTP seguros | `helmet` con CSP, HSTS, X-Frame-Options |
+| CSP sin `unsafe-inline` en scripts | JS del dashboard servido como archivos estáticos |
+| Sin puertos de entrada abiertos | Cloudflare Tunnel es solo saliente |
+| Trust proxy | `app.set("trust proxy", 1)` para X-Forwarded-For correcto detrás de Cloudflare |
 
 ---
 
 ## Troubleshooting
 
-**Las presigned URLs contienen `localhost:9000`**
+**Las presigned URLs tienen `localhost:9000`**
+→ Verificar que `S3_PUBLIC_URL=https://files.tudominio.com` esté en `.env`
 
-- Confirmar que `MINIO_SERVER_URL=https://storage.yourdomain.com` está en el contenedor de MinIO
-- Confirmar que `S3_PUBLIC_URL=https://storage.yourdomain.com` está en el servicio
-- Reiniciar ambos contenedores: `docker compose restart minio minio-upload-service`
+**Error CORS en el PUT a MinIO**
+→ Configurar política CORS en el bucket desde MinIO Console → Buckets → files → Access Policy
 
-**El browser tiene error CORS en el PUT a `storage.yourdomain.com`**
+**`401` desde la API**
+→ Enviar `Authorization: Bearer <key>`. La `MASTER_API_KEY` solo sirve para `/admin/*`.
 
-MinIO necesita una política CORS en el bucket:
+**`403 Access denied`**
+→ La key no tiene scope sobre la carpeta del archivo, o no tiene el permiso requerido (`can_upload`, `can_download`, `can_delete`).
 
-```bash
-mc alias set local http://localhost:9000 <ACCESS_KEY> <SECRET_KEY>
-mc anonymous set-json - local/files <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"AWS": ["*"]},
-    "Action": ["s3:PutObject", "s3:GetObject"],
-    "Resource": ["arn:aws:s3:::files/*"]
-  }]
-}
-EOF
-```
-
-O desde la MinIO Console: Buckets → files → Summary → Access Policy.
-
-**`401 Unauthorized` desde la API**
-
-Asegurarse de enviar `Authorization: Bearer <key>` donde `<key>` es una key
-creada desde el dashboard (no la `MASTER_API_KEY`).
-La `MASTER_API_KEY` es solo para los endpoints `/admin/*`.
-
-**`403 Access denied` en confirm-upload**
-
-La key usada para crear el upload y la usada para confirmarlo deben tener
-el mismo scope de prefijo. Si creaste el upload con una key de `infopublica/`,
-confirmá con la misma key (o con una key `*`).
-
-**El servidor no arranca — error de variable de entorno demasiado corta**
-
-```
-Error: Environment variable MASTER_API_KEY is too short (8 chars). Minimum length is 32 characters.
-Generate one with: openssl rand -hex 32
-```
-
-Generá una clave segura y actualizá el `.env`:
-
-```bash
-openssl rand -hex 32
-```
-
-**Cloudflare Tunnel no conecta**
-
-```bash
-docker compose logs cloudflared
-# Causas comunes:
-# - credentials.json faltante o TUNNEL_ID incorrecto en config.yml
-# - DNS no creado: cloudflared tunnel route dns my-app api.yourdomain.com
-```
+**El servidor no arranca**
+→ Verificar que `MASTER_API_KEY` ≥ 32 chars y que Hasura esté accesible en `HASURA_GRAPHQL_URL`.

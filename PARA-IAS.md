@@ -6,10 +6,10 @@
 
 ## Contexto del sistema
 
-Este sistema es una API de almacenamiento de archivos basada en **MinIO presigned URLs**.
-Los archivos **no se envían a través de la API** — la API genera una URL firmada y vos hacés el upload directo a MinIO.
+API de almacenamiento de archivos basada en **MinIO presigned URLs**.
+Los archivos **no se envían a través de la API** — la API genera una URL firmada y el cliente hace el upload directo a MinIO.
 
-**URL base de la API:** `https://api.tudominio.com` (reemplazar con la URL real)
+**URL base de la API:** `https://upload.nicolasrusso.ar` (reemplazar con la URL real)
 
 ---
 
@@ -22,7 +22,7 @@ Authorization: Bearer <API_KEY>
 Content-Type: application/json
 ```
 
-Donde `<API_KEY>` es una key generada desde el dashboard del sistema, NO la master key.
+`<API_KEY>` es una key creada desde el dashboard, NO la master key.
 
 ---
 
@@ -44,12 +44,17 @@ Content-Type: application/json
 }
 ```
 
+Sobre el campo `folder`:
+- Si la key tiene **acceso global** (`*`): `folder` es opcional, default `general`.
+- Si la key tiene **una carpeta asignada**: `folder` se ignora, se usa la carpeta de la key.
+- Si la key tiene **múltiples carpetas**: `folder` es **requerido** y debe ser una de las carpetas asignadas.
+
 **Respuesta `201`:**
 
 ```json
 {
   "fileId":           "uuid-del-archivo",
-  "uploadUrl":        "https://storage.tudominio.com/...?X-Amz-Signature=...",
+  "uploadUrl":        "https://files.nicolasrusso.ar/...?X-Amz-Signature=...",
   "objectKey":        "uploads/.../carpeta/fecha/uuid-nombre.pdf",
   "expiresInSeconds": 900
 }
@@ -66,7 +71,7 @@ Content-Type: <mimeType-del-archivo>
 <bytes del archivo>
 ```
 
-La `uploadUrl` ya tiene la autenticación embebida en los query params. No agregar `Authorization` header.
+La `uploadUrl` ya tiene la autenticación embebida en los query params. **No agregar `Authorization` header.**
 
 ### Paso 3 — Confirmar el upload
 
@@ -110,7 +115,7 @@ Content-Type: application/json
 
 ```json
 {
-  "downloadUrl":      "https://storage.tudominio.com/...?X-Amz-Signature=...",
+  "downloadUrl":      "https://files.nicolasrusso.ar/...?X-Amz-Signature=...",
   "expiresInSeconds": 900,
   "originalFilename": "nombre-del-archivo.pdf",
   "mimeType":         "application/pdf",
@@ -118,13 +123,29 @@ Content-Type: application/json
 }
 ```
 
-La `downloadUrl` es válida por 15 minutos (configurable). Usarla para servir el archivo al usuario.
+La `downloadUrl` es válida por 15 minutos. Usarla para servir el archivo al usuario.
+
+---
+
+## Cómo eliminar un archivo
+
+Requiere una API key con `can_delete: true`.
+
+```
+DELETE /files/<fileId>
+Authorization: Bearer <API_KEY>
+```
+
+**Respuesta `200`:** `{ "message": "File deleted", "id": "..." }`
+
+**Errores:**
+- `403` — key sin permiso de eliminación, o archivo fuera del scope de la key
+- `404` — archivo no encontrado
+- `410` — archivo ya eliminado
 
 ---
 
 ## Tipos de archivo permitidos (MIME types)
-
-Solo estos MIME types son aceptados:
 
 - `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/svg+xml`
 - `application/pdf`
@@ -136,7 +157,7 @@ Solo estos MIME types son aceptados:
 - `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (docx)
 - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (xlsx)
 
-Si enviás otro MIME type, el servidor responde `415 Unsupported Media Type`.
+Otros MIME types → `415 Unsupported Media Type`.
 
 ---
 
@@ -144,44 +165,32 @@ Si enviás otro MIME type, el servidor responde `415 Unsupported Media Type`.
 
 | Límite | Valor |
 |---|---|
-| Tamaño máximo de archivo | 100 MB (configurable) |
+| Tamaño máximo de archivo | 100 MB |
 | Validez de la URL de upload | 15 minutos |
 | Rate limit general | 60 requests/minuto por IP |
 | Tamaño del body JSON | 16 KB |
 
 ---
 
-## Campos requeridos en `/create-upload`
+## Errores comunes
 
-| Campo | Tipo | Requerido | Descripción |
-|---|---|---|---|
-| `filename` | string | sí | Nombre del archivo con extensión |
-| `mimeType` | string | sí | MIME type del archivo |
-| `sizeBytes` | number | sí | Tamaño exacto en bytes |
-| `userId` | string (UUID v4) | sí | Identificador del usuario propietario |
-| `folder` | string | no | Subcarpeta dentro del bucket. Si la API key tiene un prefijo fijo, este campo se ignora. |
-
----
-
-## Errores comunes y cómo manejarlos
-
-| Código | Significado | Qué hacer |
+| Código | Causa | Solución |
 |---|---|---|
-| `401` | Falta el header `Authorization` | Agregar `Authorization: Bearer <key>` |
-| `403` | Key inválida, revocada, o sin permisos para esa carpeta | Verificar que la key sea correcta y tenga scope sobre la carpeta |
-| `415` | MIME type no permitido | Verificar que el tipo de archivo esté en la lista de permitidos |
-| `422` | Archivo no encontrado en storage al confirmar | El PUT al `uploadUrl` no se completó — reintentar el paso 2 |
+| `401` | Falta `Authorization` header | Agregar `Authorization: Bearer <key>` |
+| `403` | Key inválida, revocada, sin permisos, o carpeta fuera de scope | Verificar key y carpeta |
+| `415` | MIME type no permitido | Usar un MIME type de la lista |
+| `422` | El PUT a MinIO no se completó | Reintentar el paso 2 antes de confirmar |
 | `429` | Rate limit superado | Esperar y reintentar con backoff exponencial |
 
 ---
 
-## Ejemplo completo en Python
+## Ejemplo en Python
 
 ```python
 import requests
 
-API = "https://api.tudominio.com"
-API_KEY = "sk_..."  # tu API key
+API = "https://upload.nicolasrusso.ar"
+API_KEY = "sk_..."  # key creada desde el dashboard
 
 def subir_archivo(filepath: str, user_id: str, folder: str = "general") -> dict:
     import os, mimetypes
@@ -190,53 +199,42 @@ def subir_archivo(filepath: str, user_id: str, folder: str = "general") -> dict:
     mime_type, _ = mimetypes.guess_type(filepath)
     size_bytes = os.path.getsize(filepath)
 
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
-    # Paso 1: pedir URL de upload
+    # Paso 1
     r = requests.post(f"{API}/create-upload", json={
-        "filename": filename,
-        "mimeType": mime_type,
-        "sizeBytes": size_bytes,
-        "userId": user_id,
-        "folder": folder,
+        "filename": filename, "mimeType": mime_type,
+        "sizeBytes": size_bytes, "userId": user_id, "folder": folder,
     }, headers=headers)
     r.raise_for_status()
     data = r.json()
 
-    file_id = data["fileId"]
-    upload_url = data["uploadUrl"]
-
-    # Paso 2: subir directo a MinIO (sin headers de autenticación)
+    # Paso 2 — sin Authorization
     with open(filepath, "rb") as f:
-        put_response = requests.put(upload_url, data=f, headers={"Content-Type": mime_type})
-    put_response.raise_for_status()
+        requests.put(data["uploadUrl"], data=f,
+                     headers={"Content-Type": mime_type}).raise_for_status()
 
-    # Paso 3: confirmar
-    confirm = requests.post(f"{API}/confirm-upload", json={"fileId": file_id}, headers=headers)
+    # Paso 3
+    confirm = requests.post(f"{API}/confirm-upload",
+                            json={"fileId": data["fileId"]}, headers=headers)
     confirm.raise_for_status()
-
-    return confirm.json()  # incluye fileId, status, objectKey, originalFilename
+    return confirm.json()
 
 
 def obtener_url_descarga(file_id: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json",
-    }
-    r = requests.post(f"{API}/create-download-url", json={"fileId": file_id}, headers=headers)
+    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+    r = requests.post(f"{API}/create-download-url",
+                      json={"fileId": file_id}, headers=headers)
     r.raise_for_status()
     return r.json()["downloadUrl"]
 ```
 
 ---
 
-## Ejemplo completo en TypeScript / JavaScript
+## Ejemplo en TypeScript / JavaScript
 
 ```typescript
-const API = "https://api.tudominio.com";
+const API = "https://upload.nicolasrusso.ar";
 const API_KEY = process.env.UPLOAD_API_KEY!;
 
 const headers = {
@@ -246,46 +244,31 @@ const headers = {
 
 async function subirArchivo(file: File, userId: string, folder = "general") {
   // Paso 1
-  const createRes = await fetch(`${API}/create-upload`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      filename: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      userId,
-      folder,
-    }),
-  });
-  if (!createRes.ok) throw new Error(`create-upload failed: ${createRes.status}`);
-  const { fileId, uploadUrl } = await createRes.json();
+  const { fileId, uploadUrl } = await fetch(`${API}/create-upload`, {
+    method: "POST", headers,
+    body: JSON.stringify({ filename: file.name, mimeType: file.type,
+                           sizeBytes: file.size, userId, folder }),
+  }).then(r => r.json());
 
-  // Paso 2 — no agregar Authorization acá
-  const putRes = await fetch(uploadUrl, {
+  // Paso 2 — sin Authorization
+  await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": file.type },
     body: file,
   });
-  if (!putRes.ok) throw new Error(`upload to MinIO failed: ${putRes.status}`);
 
   // Paso 3
-  const confirmRes = await fetch(`${API}/confirm-upload`, {
-    method: "POST",
-    headers,
+  return fetch(`${API}/confirm-upload`, {
+    method: "POST", headers,
     body: JSON.stringify({ fileId }),
-  });
-  if (!confirmRes.ok) throw new Error(`confirm-upload failed: ${confirmRes.status}`);
-  return confirmRes.json();
+  }).then(r => r.json());
 }
 
 async function obtenerUrlDescarga(fileId: string): Promise<string> {
-  const res = await fetch(`${API}/create-download-url`, {
-    method: "POST",
-    headers,
+  const { downloadUrl } = await fetch(`${API}/create-download-url`, {
+    method: "POST", headers,
     body: JSON.stringify({ fileId }),
-  });
-  if (!res.ok) throw new Error(`create-download-url failed: ${res.status}`);
-  const { downloadUrl } = await res.json();
+  }).then(r => r.json());
   return downloadUrl;
 }
 ```
@@ -294,12 +277,12 @@ async function obtenerUrlDescarga(fileId: string): Promise<string> {
 
 ## Notas importantes
 
-1. **No enviar la API key al browser directamente** — si es una integración frontend, usar una variable de entorno del framework (`NEXT_PUBLIC_*` en Next.js, etc.) y crear una key con permisos mínimos (solo la carpeta que necesite).
+1. **El `userId` debe ser un UUID v4 válido** — el servidor valida el formato.
 
-2. **El `userId` debe ser un UUID v4 válido** — el servidor valida el formato. Si tu sistema no usa UUIDs, podés generar uno determinístico a partir del ID de usuario (ej: UUID v5 con namespace propio).
+2. **La `uploadUrl` expira en 15 minutos** — si el usuario tarda más, repetir el Paso 1.
 
-3. **La `uploadUrl` expira en 15 minutos** — si el usuario tarda más, el PUT va a fallar con 403. En ese caso, repetir el Paso 1 para obtener una URL nueva.
+3. **No confirmar sin antes hacer el PUT** — `/confirm-upload` verifica que el objeto exista en MinIO.
 
-4. **No confirmar un upload sin antes hacer el PUT** — el endpoint `/confirm-upload` verifica que el objeto exista en MinIO antes de marcarlo como subido.
+4. **No agregar `Authorization` en el PUT a MinIO** — la URL ya tiene las credenciales embebidas en los query params. Agregar el header causa error.
 
-5. **El `folder` en `/create-upload` se ignora si la API key tiene un prefijo fijo** — si la key fue creada con prefijo `documentos/`, todos los archivos van a esa carpeta sin importar lo que se mande en `folder`.
+5. **El campo `folder` puede ser requerido** — depende de cuántas carpetas tenga la key (ver sección arriba).
