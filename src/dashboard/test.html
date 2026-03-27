@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Test</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f8f9fc; --surface: #fff; --border: #e2e8f0;
+      --primary: #6c63ff; --primary-h: #5a52d5;
+      --danger: #e53e3e; --success: #38a169;
+      --text: #1a202c; --muted: #718096;
+      --mono: 'Fira Mono', 'Consolas', monospace;
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
+
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; gap: 10px; }
+    header h1 { font-size: 16px; font-weight: 600; }
+    header a { margin-left: auto; font-size: 12px; color: var(--muted); text-decoration: none; }
+    header a:hover { color: var(--text); }
+
+    main { max-width: 720px; margin: 28px auto; padding: 0 20px; display: flex; flex-direction: column; gap: 20px; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+    .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+
+    label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+
+    input[type=text], input[type=password], input[type=file] {
+      width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 13px; font-family: inherit;
+    }
+    input[type=text]:focus, input[type=password]:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    input[type=file] { padding: 6px 10px; cursor: pointer; }
+
+    .field { margin-bottom: 12px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    button { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity .15s; }
+    button:hover { opacity: .85; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 5px 12px; }
+    .btn-danger  { background: var(--danger);  color: #fff; font-size: 12px; padding: 5px 12px; }
+    .btn-success { background: var(--success); color: #fff; font-size: 12px; padding: 5px 12px; }
+
+    /* Progress bar */
+    .progress-wrap { margin-top: 10px; display: none; }
+    .progress-wrap.show { display: block; }
+    .progress-bar-bg { background: var(--bg); border: 1px solid var(--border); border-radius: 99px; height: 8px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: var(--primary); border-radius: 99px; width: 0%; transition: width .2s; }
+    .progress-label { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+    /* File list */
+    .file-list { display: flex; flex-direction: column; gap: 10px; }
+    .file-item {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 12px 14px; display: flex; align-items: center; gap: 12px;
+    }
+    .file-icon { font-size: 22px; flex-shrink: 0; }
+    .file-info { flex: 1; min-width: 0; }
+    .file-info .name { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-info .meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+    .file-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .file-item.deleted { opacity: .4; }
+
+    /* Status tag */
+    .tag { display: inline-block; padding: 2px 7px; border-radius: 99px; font-size: 11px; font-weight: 500; }
+    .tag-ok   { background: rgba(56,161,105,.12); color: #276749; }
+    .tag-err  { background: rgba(229,62,62,.12);  color: #c53030; }
+    .tag-wait { background: rgba(108,99,255,.12); color: var(--primary-h); }
+
+    /* Log */
+    .log { background: #1a202c; border-radius: 6px; padding: 12px 14px; font-family: var(--mono); font-size: 12px; color: #a0aec0; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+    .log .line-ok   { color: #68d391; }
+    .log .line-err  { color: #fc8181; }
+    .log .line-info { color: #90cdf4; }
+    .log .line-muted { color: #718096; }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100; }
+    #toast.show { opacity: 1; }
+    #toast.ok  { border-color: var(--success); color: var(--success); }
+    #toast.err { border-color: var(--danger);  color: var(--danger); }
+
+    .empty { text-align: center; color: var(--muted); padding: 20px; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2">
+    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+  </svg>
+  <h1>API Test</h1>
+  <a href="/dashboard">← Dashboard</a>
+</header>
+
+<main>
+
+  <!-- Auth -->
+  <div class="card">
+    <h2>API Key</h2>
+    <div class="row">
+      <div class="field">
+        <label>API Key (solo en memoria — no se guarda)</label>
+        <input type="password" id="api-key-input" placeholder="sk_..." autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>User ID (se usa como propietario del archivo)</label>
+        <input type="text" id="user-id-input" placeholder="UUID" />
+      </div>
+    </div>
+    <button class="btn-primary" id="btn-connect">Conectar</button>
+    <span id="connect-status" style="margin-left:12px; font-size:12px; color:var(--muted);"></span>
+  </div>
+
+  <!-- Upload -->
+  <div class="card" id="upload-card" style="opacity:.4; pointer-events:none;">
+    <h2>Subir archivo</h2>
+    <div class="row">
+      <div class="field">
+        <label>Archivo</label>
+        <input type="file" id="file-input" />
+      </div>
+      <div class="field">
+        <label>Carpeta (opcional)</label>
+        <input type="text" id="folder-input" placeholder="imagenes/perfil" />
+      </div>
+    </div>
+    <button class="btn-primary" id="btn-upload">Subir</button>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
+      <div class="progress-label" id="progress-label">Subiendo…</div>
+    </div>
+  </div>
+
+  <!-- Uploaded files -->
+  <div class="card" id="files-card" style="display:none;">
+    <h2>Archivos subidos en esta sesión</h2>
+    <div class="file-list" id="file-list"></div>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <h2>Log</h2>
+    <div class="log" id="log"><span class="line-muted">Esperando…</span></div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script src="/static/test.js" defer></script>
+</body>
+</html>
