@@ -68,6 +68,7 @@ uploads/
 *.webm
 *.pid
 *.sock
+*session*.json
 core.[0-9]*
 *.deb
 *.iso
