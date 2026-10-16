@@ -46,6 +46,30 @@ export const minioPublicClient: Minio.Client = (() => {
 })();
 
 /**
+ * Tailnet client — used ONLY to generate presigned PUT URLs for the direct
+ * fast-path upload. When S3_TAILNET_URL is set (MinIO exposed over HTTPS on the
+ * tailnet via `tailscale serve`), a browser on the tailnet PUTs straight here,
+ * bypassing Cloudflare (~20× faster, no 100MB body cap).
+ *
+ * null when S3_TAILNET_URL is not configured (no fast-path available).
+ */
+export const minioTailnetClient: Minio.Client | null = (() => {
+  if (!env.S3_TAILNET_URL) return null;
+
+  const url = new URL(env.S3_TAILNET_URL);
+  const useSSL = url.protocol === "https:";
+  const port = url.port ? parseInt(url.port, 10) : useSSL ? 443 : 80;
+
+  return new Minio.Client({
+    endPoint: url.hostname,
+    port,
+    useSSL,
+    accessKey: env.S3_ACCESS_KEY,
+    secretKey: env.S3_SECRET_KEY,
+  });
+})();
+
+/**
  * Verify the bucket exists and the client can reach MinIO.
  * Called once at startup.
  */

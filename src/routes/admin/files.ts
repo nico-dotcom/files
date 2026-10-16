@@ -3,11 +3,39 @@
  * All routes require the MASTER_API_KEY.
  */
 import { Router, Request, Response } from "express";
-import { listFiles, softDeleteFile } from "../../config/files";
+import { listFiles, softDeleteFile, getStatsOverview, getActivityLast30Days, getFolderSizeStats } from "../../config/files";
+import { listFolders } from "../../config/folders";
 import { isValidUuid } from "../../middleware/validate";
 import { safeEqual } from "../../utils/crypto";
 
 const router = Router();
+
+// ─── Background stats worker ──────────────────────────────────────────────────
+
+let statsCache: { data: unknown; ts: number } | null = null;
+const STATS_INTERVAL = 2 * 60 * 1000; // refresca cada 2 min
+
+async function computeStats(): Promise<void> {
+  try {
+    const [overview, activity, folders] = await Promise.all([
+      getStatsOverview(),
+      getActivityLast30Days(),
+      listFolders(),
+    ]);
+    const folderStats = await Promise.all(folders.map(async f => {
+      const s = await getFolderSizeStats(f.name);
+      return { name: f.name, id: f.id, file_count: s.file_count, size_bytes: s.size_bytes };
+    }));
+    statsCache = { data: { overview, activity_30d: activity, by_folder: folderStats }, ts: Date.now() };
+    console.log("[stats worker] cache refreshed");
+  } catch (err) {
+    console.error("[stats worker] refresh failed:", err);
+  }
+}
+
+// Corre al arrancar y cada 2 minutos en background
+computeStats();
+setInterval(computeStats, STATS_INTERVAL);
 
 function requireMaster(req: Request, res: Response): boolean {
   const master = process.env.MASTER_API_KEY;
@@ -62,6 +90,17 @@ router.delete("/files/:id", async (req: Request, res: Response): Promise<void> =
     console.error("[admin/files] delete error:", err);
     res.status(500).json({ error: "Failed to delete file" });
   }
+});
+
+// ─── GET /admin/stats ─────────────────────────────────────────────────────────
+
+router.get("/stats", (req: Request, res: Response): void => {
+  if (!requireMaster(req, res)) return;
+  if (!statsCache) {
+    res.status(503).json({ error: "Stats not ready yet, retry in a few seconds" });
+    return;
+  }
+  res.json(statsCache.data);
 });
 
 export default router;

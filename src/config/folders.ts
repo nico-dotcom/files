@@ -4,6 +4,9 @@ export interface FolderRecord {
   id: string;
   name: string;
   created_at: string;
+  key_count?: number;
+  size_bytes?: number;
+  file_count?: number;
 }
 
 export async function createFolder(name: string): Promise<FolderRecord> {
@@ -19,14 +22,22 @@ export async function createFolder(name: string): Promise<FolderRecord> {
 }
 
 export async function listFolders(): Promise<FolderRecord[]> {
-  const data = await hasuraQuery<{ folders: FolderRecord[] }>(
+  const data = await hasuraQuery<{ folders: Array<FolderRecord & { api_key_folders: { api_key_id: string }[] }> }>(
     `query ListFolders {
       folders(order_by: { name: asc }) {
         id name created_at
+        api_key_folders(where: { api_key: { is_active: { _eq: true } } }) {
+          api_key_id
+        }
       }
     }`
   );
-  return data.folders;
+  return data.folders.map(f => ({
+    id: f.id,
+    name: f.name,
+    created_at: f.created_at,
+    key_count: f.api_key_folders?.length ?? 0,
+  }));
 }
 
 export async function deleteFolder(id: string): Promise<boolean> {

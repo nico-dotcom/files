@@ -13,7 +13,8 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/gif",
   "image/webp",
-  "image/svg+xml",
+  // NOTE: image/svg+xml intentionally NOT allowed — SVGs can carry inline
+  // JavaScript and would execute in the files.* origin when opened in a browser.
   "application/pdf",
   "application/zip",
   "application/x-zip-compressed",
@@ -30,6 +31,11 @@ const ALLOWED_MIME_TYPES = new Set([
   "audio/wav",
 ]);
 
+// Control characters (0x00–0x1F and 0x7F) — never valid in a filename and a
+// common vector for log/HTML injection.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\x00-\x1F\x7F]/;
+
 export function validateCreateUpload(
   req: Request,
   res: Response,
@@ -39,6 +45,14 @@ export function validateCreateUpload(
 
   if (typeof filename !== "string" || filename.trim().length === 0) {
     res.status(400).json({ error: "filename is required and must be a string" });
+    return;
+  }
+
+  // original_filename is stored verbatim and later rendered in the admin
+  // dashboard — reject angle brackets and control characters (defense-in-depth
+  // against stored XSS) and cap the length.
+  if (filename.length > 255 || /[<>]/.test(filename) || CONTROL_CHARS.test(filename)) {
+    res.status(400).json({ error: "filename contains invalid characters or is too long" });
     return;
   }
 

@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
-import { createFolder, listFolders, deleteFolder } from "../../config/folders";
+import { createFolder, listFolders, deleteFolder, FolderRecord } from "../../config/folders";
 import { isValidUuid } from "../../middleware/validate";
 import { safeEqual } from "../../utils/crypto";
+import { getFolderSizeStats } from "../../config/files";
 
 const router = Router();
 
@@ -26,7 +27,13 @@ router.get("/folders", async (req: Request, res: Response): Promise<void> => {
   if (!requireMaster(req, res)) return;
   try {
     const folders = await listFolders();
-    res.json({ folders });
+    const stats = await Promise.all(folders.map(f => getFolderSizeStats(f.name)));
+    const enriched: FolderRecord[] = folders.map((f, i) => ({
+      ...f,
+      size_bytes: stats[i].size_bytes,
+      file_count: stats[i].file_count,
+    }));
+    res.json({ folders: enriched });
   } catch (err) {
     console.error("[admin/folders] list error:", err);
     res.status(500).json({ error: "Failed to list folders" });

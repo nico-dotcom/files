@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subir archivo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f8f9fc;
+      --surface:  #ffffff;
+      --border:   #e2e8f0;
+      --primary:  #6c63ff;
+      --primary-h:#5a52d5;
+      --danger:   #e53e3e;
+      --success:  #38a169;
+      --text:     #1a202c;
+      --muted:    #718096;
+      --mono:     'Fira Mono', 'Consolas', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; }
+    header a { margin-left: auto; font-size: 12px; color: var(--muted); text-decoration: none; }
+    header a:hover { color: var(--primary); }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      width: 100%;
+      max-width: 520px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── Auth ── */
+    #auth-screen { text-align: center; }
+    #auth-screen h2 { font-size: 20px; margin-bottom: 8px; }
+    #auth-screen p  { color: var(--muted); margin-bottom: 20px; }
+    #auth-screen input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: var(--mono);
+      margin-bottom: 12px;
+    }
+    #auth-screen input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+    /* ── Upload screen ── */
+    #upload-screen { display: none; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    /* Drop zone */
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      position: relative;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: var(--primary);
+      background: rgba(108, 99, 255, .04);
+    }
+    #drop-zone.has-file {
+      border-color: var(--success);
+      background: rgba(56, 161, 105, .04);
+    }
+    #drop-zone svg { display: block; margin: 0 auto 12px; }
+    #drop-zone .drop-text {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    #drop-zone .drop-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    #file-input { display: none; }
+
+    #file-info {
+      display: none;
+      margin-top: 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    /* Expiry selector */
+    .expiry-group {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+    .expiry-group label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 10px 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--muted);
+      transition: border-color .12s, background .12s;
+      text-align: center;
+    }
+    .expiry-group label:has(input:checked) {
+      border-color: var(--primary);
+      background: rgba(108, 99, 255, .07);
+      color: var(--primary-h);
+      font-weight: 600;
+    }
+    .expiry-group label .val {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .expiry-group label:has(input:checked) .val { color: var(--primary); }
+    .expiry-group input[type=radio] { display: none; }
+    #expiry-select { display: none; }
+
+    /* Buttons */
+    button {
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: opacity .15s;
+    }
+    button:hover:not(:disabled) { opacity: .85; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; width: 100%; }
+    .btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-success { background: var(--success); color: #fff; }
+
+    /* Progress */
+    #progress-wrap { display: none; }
+    .progress-bar-bg {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      background: var(--primary);
+      border-radius: 99px;
+      transition: width .2s;
+      width: 0%;
+    }
+    #progress-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+      text-align: center;
+    }
+
+    /* Result */
+    #result-wrap { display: none; }
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: var(--success);
+      font-size: 15px;
+    }
+    .result-url-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #result-url {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--bg);
+      color: var(--primary-h);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #result-expiry {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .result-actions { display: flex; gap: 8px; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .2s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    #toast.show { opacity: 1; }
+    #toast.ok   { border-color: var(--success); color: var(--success); }
+    #toast.err  { border-color: var(--danger);  color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" y1="3" x2="12" y2="15"/>
+  </svg>
+  <h1>Subir archivo</h1>
+  <a href="/dashboard">← Dashboard</a>
+</header>
+
+<main>
+  <div class="card">
+
+    <!-- ── Auth ── -->
+    <div id="auth-screen">
+      <h2>Acceso</h2>
+      <p>Ingresá la master key para subir archivos.</p>
+      <input id="master-input" type="password" placeholder="Master key…" autocomplete="current-password" />
+      <button class="btn-primary" id="btn-login">Entrar</button>
+    </div>
+
+    <!-- ── Upload ── -->
+    <div id="upload-screen">
+
+      <!-- Drop zone -->
+      <div>
+        <div class="section-label">Archivo</div>
+        <div id="drop-zone">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#a0aec0" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div class="drop-text">Arrastrá un archivo o hacé click</div>
+          <div class="drop-sub">Cualquier tipo · hasta 100 MB</div>
+          <div id="file-info"></div>
+        </div>
+        <input id="file-input" type="file" />
+        <select id="expiry-select"></select>
+      </div>
+
+      <!-- Expiry -->
+      <div>
+        <div class="section-label">¿Cuándo caduca el link?</div>
+        <div class="expiry-group">
+          <label>
+            <input type="radio" name="expiry" value="3600" />
+            <span class="val">1</span>hora
+          </label>
+          <label>
+            <input type="radio" name="expiry" value="21600" />
+            <span class="val">6</span>horas
+          </label>
+          <label>
+            <input type="radio" name="expiry" value="86400" checked />
+            <span class="val">24</span>horas
+          </label>
+          <label>
+            <input type="radio" name="expiry" value="259200" />
+            <span class="val">3</span>días
+          </label>
+          <label>
+            <input type="radio" name="expiry" value="604800" />
+            <span class="val">7</span>días
+          </label>
+        </div>
+      </div>
+
+      <!-- Upload button -->
+      <button class="btn-primary" id="btn-upload" disabled>Subir y generar link</button>
+
+      <!-- Progress -->
+      <div id="progress-wrap">
+        <div class="progress-bar-bg"><div id="progress-bar"></div></div>
+        <div id="progress-label">Preparando…</div>
+      </div>
+
+      <!-- Result -->
+      <div id="result-wrap">
+        <div class="result-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Link generado
+        </div>
+        <div style="margin-top: 12px;">
+          <div class="result-url-row">
+            <input id="result-url" type="text" readonly />
+          </div>
+          <div id="result-expiry"></div>
+        </div>
+        <div class="result-actions" style="margin-top: 14px;">
+          <button class="btn-success" id="btn-copy">Copiar link</button>
+          <button class="btn-ghost" id="btn-new">Subir otro archivo</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script src="/static/uploader.js?v=1" defer></script>
+</body>
+</html>

@@ -22,6 +22,105 @@ const FILE_FIELDS = `
   id bucket object_key original_filename mime_type size_bytes owner_user_id status created_at deleted_at
 `;
 
+// ─── Folder size (via DB, not MinIO listing) ─────────────────────────────────
+
+export async function getFolderSizeStats(folderName: string): Promise<{ file_count: number; size_bytes: number }> {
+  const data = await hasuraQuery<{
+    files_aggregate: { aggregate: { count: number; sum: { size_bytes: number | null } } };
+  }>(
+    `query FolderSizeStats($like: String!) {
+      files_aggregate(where: { deleted_at: { _is_null: true }, object_key: { _like: $like } }) {
+        aggregate { count sum { size_bytes } }
+      }
+    }`,
+    { like: `%/${folderName}/%` }
+  );
+  const agg = data.files_aggregate.aggregate;
+  return { file_count: agg.count, size_bytes: agg.sum?.size_bytes ?? 0 };
+}
+
+// ─── Stats overview ───────────────────────────────────────────────────────────
+
+export interface StatsOverview {
+  total_files: number;
+  total_size_bytes: number;
+  deleted_files: number;
+  active_keys: number;
+  total_folders: number;
+  largest_files: Pick<FileRecord, "id" | "original_filename" | "size_bytes" | "created_at" | "object_key" | "mime_type">[];
+}
+
+export async function getStatsOverview(): Promise<StatsOverview> {
+  const data = await hasuraQuery<{
+    active_files:   { aggregate: { count: number; sum: { size_bytes: number | null } } };
+    deleted_files:  { aggregate: { count: number } };
+    active_keys:    { aggregate: { count: number } };
+    total_folders:  { aggregate: { count: number } };
+    largest_files:  Pick<FileRecord, "id" | "original_filename" | "size_bytes" | "created_at" | "object_key" | "mime_type">[];
+  }>(
+    `query StatsOverview {
+      active_files: files_aggregate(where: { deleted_at: { _is_null: true } }) {
+        aggregate { count sum { size_bytes } }
+      }
+      deleted_files: files_aggregate(where: { deleted_at: { _is_null: false } }) {
+        aggregate { count }
+      }
+      active_keys: api_keys_aggregate(where: { is_active: { _eq: true } }) {
+        aggregate { count }
+      }
+      total_folders: folders_aggregate { aggregate { count } }
+      largest_files: files(
+        where: { deleted_at: { _is_null: true } }
+        order_by: { size_bytes: desc }
+        limit: 10
+      ) { id original_filename size_bytes created_at object_key mime_type }
+    }`
+  );
+  return {
+    total_files:     data.active_files.aggregate.count,
+    total_size_bytes: data.active_files.aggregate.sum?.size_bytes ?? 0,
+    deleted_files:   data.deleted_files.aggregate.count,
+    active_keys:     data.active_keys.aggregate.count,
+    total_folders:   data.total_folders.aggregate.count,
+    largest_files:   data.largest_files,
+  };
+}
+
+export interface EventActivity {
+  date: string;
+  upload_count: number;
+  download_count: number;
+  upload_size_bytes: number;
+}
+
+export async function getActivityLast30Days(): Promise<EventActivity[]> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const data = await hasuraQuery<{
+    file_events: Array<{ event_type: string; size_bytes: number | null; created_at: string }>;
+  }>(
+    `query RecentEvents($since: timestamptz!) {
+      file_events(where: { created_at: { _gte: $since } }, order_by: { created_at: asc }) {
+        event_type size_bytes created_at
+      }
+    }`,
+    { since }
+  );
+
+  const byDay = new Map<string, EventActivity>();
+  for (const ev of data.file_events) {
+    const date = ev.created_at.slice(0, 10);
+    if (!byDay.has(date)) byDay.set(date, { date, upload_count: 0, download_count: 0, upload_size_bytes: 0 });
+    const d = byDay.get(date)!;
+    if (ev.event_type === "upload_confirmed") {
+      d.upload_count++;
+      d.upload_size_bytes += ev.size_bytes ?? 0;
+    } else if (ev.event_type === "download_url_created") {
+      d.download_count++;
+    }
+  }
+  return Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ─── List ────────────────────────────────────────────────────────────────────
 
 /** List non-deleted files, optionally filtered by folder prefix. */

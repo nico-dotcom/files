@@ -22,10 +22,10 @@ const GET_FILE = `
 `;
 
 const CONFIRM_UPLOAD = `
-  mutation ConfirmUpload($id: uuid!, $uploaded_at: timestamptz!) {
+  mutation ConfirmUpload($id: uuid!, $uploaded_at: timestamptz!, $size_bytes: bigint!) {
     update_files_by_pk(
       pk_columns: { id: $id }
-      _set: { status: "uploaded", uploaded_at: $uploaded_at }
+      _set: { status: "uploaded", uploaded_at: $uploaded_at, size_bytes: $size_bytes }
     ) {
       id
       status
@@ -98,10 +98,14 @@ router.post(
     // Verify the API key's prefix scope covers this object key
     if (!checkScope(fileRecord.object_key, "upload", req, res)) return;
 
-    // 2. Verify the object really exists in MinIO.
-    //    This prevents a client from confirming an upload that never happened.
+    // 2. Verify the object really exists in MinIO and read its REAL size.
+    //    This prevents a client from confirming an upload that never happened,
+    //    AND enforces the size limit — a presigned PUT does not cap Content-Length,
+    //    so the declared sizeBytes at /create-upload is only advisory.
+    let actualSize: number;
     try {
-      await minioClient.statObject(env.S3_BUCKET, fileRecord.object_key);
+      const stat = await minioClient.statObject(env.S3_BUCKET, fileRecord.object_key);
+      actualSize = stat.size;
     } catch (err: unknown) {
       const minioErr = err as { code?: string };
       if (minioErr.code === "NotFound") {
@@ -115,11 +119,26 @@ router.post(
       return;
     }
 
-    // 3. Mark as uploaded
+    // Reject (and remove) objects that exceed the max size, regardless of what
+    // the client declared when the upload was created.
+    if (actualSize > env.MAX_FILE_SIZE_BYTES) {
+      try {
+        await minioClient.removeObject(env.S3_BUCKET, fileRecord.object_key);
+      } catch (err) {
+        console.error("[confirm-upload] failed to remove oversized object:", err);
+      }
+      res.status(413).json({
+        error: `Uploaded file (${actualSize} bytes) exceeds the maximum allowed size of ${env.MAX_FILE_SIZE_BYTES} bytes`,
+      });
+      return;
+    }
+
+    // 3. Mark as uploaded, recording the REAL size (not the client-declared one).
     try {
       const updated = await hasuraQuery<ConfirmUploadResult>(CONFIRM_UPLOAD, {
         id: fileId,
         uploaded_at: new Date().toISOString(),
+        size_bytes: actualSize,
       });
 
       logFileEvent({

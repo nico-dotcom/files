@@ -245,6 +245,50 @@
     .scope-radios:has(#f-specific:checked) ~ #folder-select-wrapper { display: block; }
     #edit-folder-wrapper { display: none; }
     .scope-radios:has(#edit-specific:checked) ~ #edit-folder-wrapper { display: block; }
+
+    /* Files modal */
+    #files-modal .modal { max-width: 800px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column; }
+    #files-modal .modal h3 { color: var(--text); margin-bottom: 4px; }
+    #files-modal .modal-subtitle { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+    #files-modal-body { overflow-y: auto; flex: 1; border: 1px solid var(--border); border-radius: 6px; }
+    #files-modal-body table { width: 100%; border-collapse: collapse; }
+    #files-modal-body th { position: sticky; top: 0; background: var(--surface); padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    #files-modal-body td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 13px; }
+    #files-modal-body tr:last-child td { border-bottom: none; }
+    #files-modal-body tr:hover td { background: rgba(108,99,255,.04); }
+    .btn-files { background: var(--primary); color: #fff; padding: 4px 10px; font-size: 12px; margin-right: 4px; }
+    .file-name { font-family: var(--mono); font-size: 12px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+    .file-key  { color: var(--muted); font-size: 11px; font-family: var(--mono); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; margin-top: 2px; }
+
+    /* Stats section */
+    .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+    .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 6px; }
+    .stat-card .value { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+    .stat-card .sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .stat-card.accent { border-color: var(--primary); background: rgba(108,99,255,.04); }
+    .stat-card.accent .value { color: var(--primary); }
+
+    .bar-chart { display: flex; align-items: flex-end; gap: 3px; height: 80px; margin: 8px 0 4px; }
+    .bar-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .bar-day .bar { width: 100%; border-radius: 2px 2px 0 0; min-height: 2px; transition: height .2s; cursor: default; }
+    .bar-day .bar.uploads   { background: var(--primary); }
+    .bar-day .bar.downloads { background: #38a169; }
+    .bar-day .tick { font-size: 9px; color: var(--muted); white-space: nowrap; writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 2px; }
+    .chart-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
+    .chart-legend span { display: flex; align-items: center; gap: 5px; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+
+    .folder-bar-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .folder-bar-row:last-child { border-bottom: none; }
+    .folder-bar-name { width: 140px; font-family: var(--mono); font-size: 12px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-bar-fill { flex: 1; height: 10px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+    .folder-bar-fill div { height: 100%; background: var(--primary); border-radius: 4px; transition: width .4s; }
+    .folder-bar-meta { font-size: 12px; color: var(--muted); text-align: right; min-width: 130px; }
+
+    .stats-subsection { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+    .stats-subsection h3 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+    #stats-spinner { text-align: center; padding: 40px; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -279,14 +323,58 @@
       <thead>
         <tr>
           <th>Nombre</th>
+          <th>Archivos</th>
+          <th>Tamaño</th>
+          <th>Claves activas</th>
           <th>Creada</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="folders-body">
-        <tr><td colspan="3" class="empty"><span class="spinner"></span> Cargando...</td></tr>
+        <tr><td colspan="6" class="empty"><span class="spinner"></span> Cargando...</td></tr>
       </tbody>
     </table>
+  </section>
+
+  <!-- Stats section -->
+  <section id="stats-section">
+    <h2>Estadísticas del sistema</h2>
+    <div id="stats-spinner"><span class="spinner"></span> Cargando estadísticas…</div>
+    <div id="stats-content" style="display:none">
+
+      <div class="stat-cards" id="stat-cards"></div>
+
+      <div class="stats-subsection">
+        <h3>Actividad últimos 30 días</h3>
+        <div class="bar-chart" id="activity-chart"></div>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:var(--primary)"></span> Subidas</span>
+          <span><span class="dot" style="background:#38a169"></span> Descargas</span>
+        </div>
+        <p id="activity-empty" style="display:none;color:var(--muted);font-size:13px;margin-top:8px;">Sin actividad registrada en los últimos 30 días.</p>
+      </div>
+
+      <div class="stats-subsection">
+        <h3>Distribución por carpeta</h3>
+        <div id="folder-bars"></div>
+      </div>
+
+      <div class="stats-subsection">
+        <h3>Archivos más grandes</h3>
+        <table id="largest-files-table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);">Archivo</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);">Tamaño</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);">Tipo</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);">Subido</th>
+            </tr>
+          </thead>
+          <tbody id="largest-files-body"></tbody>
+        </table>
+      </div>
+
+    </div>
   </section>
 
   <!-- Create key form -->
@@ -442,11 +530,36 @@
   </div>
 </div>
 
+<!-- ── Files modal ───────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="files-modal">
+  <div class="modal">
+    <h3 id="files-modal-title">Archivos</h3>
+    <p class="modal-subtitle" id="files-modal-subtitle"></p>
+    <div id="files-modal-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Archivo</th>
+            <th>Tamaño</th>
+            <th>Tipo</th>
+            <th>Subido</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="files-modal-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-ghost" id="btn-close-files-modal">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ─────────────────────────────────────────────────────────────────── -->
 <div id="toast"></div>
 
 <!-- All logic is in /static/dashboard.js — no inline scripts needed -->
-<script src="/static/dashboard.js?v=5" defer></script>
-<script src="/static/dashboard-init.js?v=5" defer></script>
+<script src="/static/dashboard.js?v=8" defer></script>
+<script src="/static/dashboard-init.js?v=8" defer></script>
 </body>
 </html>

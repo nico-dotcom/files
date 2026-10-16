@@ -12,4 +12,7 @@ document.getElementById('btn-close-modal').addEventListener('click', closeModal)
 document.getElementById('btn-cancel-edit').addEventListener('click', closeEditModal);
 document.getElementById('btn-save-edit').addEventListener('click', saveEdit);
 
+document.getElementById('btn-close-files-modal').addEventListener('click', closeFilesModal);
+document.getElementById('files-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeFilesModal(); });
+
 // Folder visibility is handled by CSS :has() — no JS needed.

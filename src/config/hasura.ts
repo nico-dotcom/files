@@ -28,7 +28,7 @@ export async function hasuraQuery<T>(
     );
   }
 
-  const json: GraphQLResponse<T> = await response.json();
+  const json = (await response.json()) as GraphQLResponse<T>;
 
   if (json.errors && json.errors.length > 0) {
     const messages = json.errors.map((e) => e.message).join("; ");

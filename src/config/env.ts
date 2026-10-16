@@ -44,6 +44,12 @@ export const env = {
   // If not set, presigned URLs will use the internal S3_ENDPOINT (localhost only).
   S3_PUBLIC_URL: process.env.S3_PUBLIC_URL || "",
 
+  // Tailnet-facing MinIO URL (HTTPS, served by `tailscale serve`) for the DIRECT
+  // fast-path upload. When the browser is on the tailnet it PUTs straight to MinIO
+  // here — ~20× faster than the Cloudflare tunnel and with no 100MB body cap.
+  // e.g. "https://raspberry-principal.tailaf751b.ts.net". Empty = no fast-path.
+  S3_TAILNET_URL: process.env.S3_TAILNET_URL || "",
+
   // Presigned URL expiration in seconds (default: 15 minutes)
   PRESIGNED_URL_EXPIRY_SECONDS: parseInt(
     process.env.PRESIGNED_URL_EXPIRY_SECONDS || "900",
@@ -54,9 +60,19 @@ export const env = {
   HASURA_GRAPHQL_URL: requireEnv("HASURA_GRAPHQL_URL"),
   HASURA_ADMIN_SECRET: requireSecret("HASURA_ADMIN_SECRET", 16),
 
-  // Max file size in bytes (default: 100MB)
+  // Max file size in bytes — overall hard cap, applies to the DIRECT tailnet path
+  // (default: 2GB). The Cloudflare public path is capped separately below because
+  // Cloudflare's free tier rejects request bodies over ~100MB.
   MAX_FILE_SIZE_BYTES: parseInt(
-    process.env.MAX_FILE_SIZE_BYTES || String(100 * 1024 * 1024),
+    process.env.MAX_FILE_SIZE_BYTES || String(2 * 1024 * 1024 * 1024),
+    10
+  ),
+
+  // Max file size for the PUBLIC (Cloudflare) path. Cloudflare's free tier hard-caps
+  // request bodies at ~100MB, so a bigger file can only go through the tailnet path.
+  // The frontend uses this to block/redirect oversized uploads when off-tailnet.
+  PUBLIC_MAX_FILE_SIZE_BYTES: parseInt(
+    process.env.PUBLIC_MAX_FILE_SIZE_BYTES || String(100 * 1024 * 1024),
     10
   ),
 };

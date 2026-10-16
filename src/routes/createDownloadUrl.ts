@@ -86,13 +86,29 @@ router.post(
     // Check that the API key's prefix scope covers this object key
     if (!checkScope(fileRecord.object_key, "download", req, res)) return;
 
-    // 2. Generate presigned GET URL
+    // 2. Generate presigned GET URL.
+    //    Safe types (images/PDF) are served inline so they still preview in the
+    //    browser; everything else is forced to download (attachment) so active
+    //    content (HTML/XML/etc.) can never execute in the files.* origin.
+    //    The Content-Type is pinned to the validated mime so the browser cannot
+    //    sniff a benign-looking file into something executable.
+    const INLINE_OK = new Set([
+      "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf",
+    ]);
+    const disposition = INLINE_OK.has(fileRecord.mime_type) ? "inline" : "attachment";
     let downloadUrl: string;
     try {
+      const respHeaders = {
+        "response-content-disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(
+          fileRecord.original_filename
+        )}`,
+        "response-content-type": fileRecord.mime_type,
+      };
       downloadUrl = await minioPublicClient.presignedGetObject(
         env.S3_BUCKET,
         fileRecord.object_key,
-        env.PRESIGNED_URL_EXPIRY_SECONDS
+        env.PRESIGNED_URL_EXPIRY_SECONDS,
+        respHeaders
       );
     } catch (err) {
       console.error("[create-download-url] MinIO presign failed:", err);
